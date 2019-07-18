@@ -1210,3 +1210,7 @@
 &uart_B {
 	status = "disabled";
 };
+
+&uart_AO_B {
+	status = "okay";
+};
