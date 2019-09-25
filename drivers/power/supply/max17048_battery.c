@@ -18,7 +18,6 @@
 #include <linux/i2c.h>
 #include <linux/delay.h>
 #include <linux/power_supply.h>
-#include <linux/power/max17048_battery.h>
 #include <linux/slab.h>
 
 #define MAX17048_VCELL 0x02
