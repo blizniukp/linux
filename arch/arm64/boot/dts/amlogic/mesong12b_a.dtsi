@@ -249,8 +249,8 @@
 		compatible = "amlogic, pm";
 		status = "okay";
 		device_name = "aml_pm";
-		reg = <0x0 0xff8000a8 0x0 0x4>,
-			<0x0 0xff80023c 0x0 0x4>;
+		debug_reg = <0xff8000a8>;
+		exit_reg = <0xff80023c>;
 	};
 
 	secmon {
@@ -1021,7 +1021,15 @@
 		interrupts = <0 147 4>;
 		interrupt-names = "galcore";
 		reg = <0x0 0xff100000 0x0 0x800
-		       0x0 0xff000000 0x0 0x400000>;
+			0x0 0xff000000 0x0 0x400000
+			0x0 0xff63c10c 0x0 0x4
+			0x0 0xff63c110 0x0 0x4
+			0x0 0xffd01088 0x0 0x4
+			0X0 0xff63c1c8 0X0 0x4
+			>;
+		reg-names = "NN_REG","NN_SRAM","NN_MEM0",
+			"NN_MEM1","NN_RESET","NN_CLK";
+		nn_efuse = <0xff63003c 0x20>;
 	};
 
 	aocec: aocec {
@@ -1204,6 +1212,13 @@
 			"clk_hcodec_mux",
 			"clk_hevc_mux",
 			"clk_hevcb_mux";
+	};
+
+	amvideocap {
+		compatible = "amlogic, amvideocap";
+		dev_name = "amvideocap.0";
+		status = "okay";
+		max_size = <8>;//8M
 	};
 
 	vdec {
@@ -1758,6 +1773,7 @@
 		compatible = "arm, isp";
 		reg = <0x0 0xff140000 0x0 0x00040000>;
 		reg-names = "ISP";
+		isp-efuse = <0xff630038 0x4000>;
 		interrupts = <0 142 4>;
 		interrupt-names = "ISP";
 		temper-buf-size = <24>;

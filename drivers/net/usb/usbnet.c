@@ -47,6 +47,7 @@
 #include <linux/pm_runtime.h>
 
 #define DRIVER_VERSION		"22-Aug-2005"
+#define HUAWEI_VENDOR_ID 0x12d1
 
 
 /*-------------------------------------------------------------------------*/
@@ -508,6 +509,7 @@ static int rx_submit (struct usbnet *dev, struct urb *urb, gfp_t flags)
 
 	if (netif_running (dev->net) &&
 	    netif_device_present (dev->net) &&
+	    test_bit(EVENT_DEV_OPEN, &dev->flags) &&
 	    !test_bit (EVENT_RX_HALT, &dev->flags) &&
 	    !test_bit (EVENT_DEV_ASLEEP, &dev->flags)) {
 		switch (retval = usb_submit_urb (urb, GFP_ATOMIC)) {
@@ -1394,6 +1396,11 @@ netdev_tx_t usbnet_start_xmit (struct sk_buff *skb,
 		spin_unlock_irqrestore(&dev->txq.lock, flags);
 		goto drop;
 	}
+	if (netif_queue_stopped(net)) {
+		usb_autopm_put_interface_async(dev->intf);
+		spin_unlock_irqrestore(&dev->txq.lock, flags);
+		goto drop;
+	}
 
 #ifdef CONFIG_PM
 	/* if this triggers the device is still a sleep */
@@ -1761,6 +1768,11 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	// ok, it's ready to go.
 	usb_set_intfdata (udev, dev);
 
+	if(xdev->descriptor.idVendor == HUAWEI_VENDOR_ID){
+		if( 0 != (xdev->config->desc.bmAttributes & 0x20)){
+			usb_enable_autosuspend(xdev);
+		}
+	}
 	netif_device_attach (net);
 
 	if (dev->driver_info->flags & FLAG_LINK_INTR)

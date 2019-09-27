@@ -237,12 +237,12 @@
 		#clock-cells = <0>;
 	};
 
-	meson_suspend: pm {
+	aml_pm {
 		compatible = "amlogic, pm";
-		/*gxbaby-suspend;*/
 		status = "okay";
-		reg = <0xff8000a8 0x4>,
-			<0xff80023c 0x4>;
+                device_name = "aml_pm";
+		debug_reg = <0xff8000a8>;
+		exit_reg = <0xff80023c>;
 	};
 
 	cpuinfo {
@@ -1119,10 +1119,9 @@
 		clocks = <&clkc CLKID_SD_EMMC_C>,
 			   <&clkc CLKID_SD_EMMC_C_P0_COMP>,
 			   <&clkc CLKID_FCLK_DIV2>,
-			   <&clkc CLKID_FCLK_DIV5>,
 			   <&clkc CLKID_GP0_PLL>,
 			   <&xtal>;
-		clock-names = "core","clkin0","clkin1","clkin2","clkin3","xtal";
+		clock-names = "core","clkin0","clkin1","clkin2","xtal";
 
 		bus-width = <8>;
 		cap-sd-highspeed;
@@ -1390,7 +1389,7 @@
 	dmc_monitor {
 		compatible = "amlogic, dmc_monitor";
 		status = "okay";
-		reg_base = <0xff638800>;
+		reg_base = <0xff639000>;
 		interrupts = <GIC_SPI 51 IRQ_TYPE_EDGE_RISING>;
 	};
 

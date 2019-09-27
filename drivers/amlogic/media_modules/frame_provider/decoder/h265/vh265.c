@@ -229,7 +229,7 @@ static const char * const matrix_coeffs_names[] = {
  *	3, (1/4):(1/4) ratio, with both compressed frame included
  *	0x10, double write only
  */
-static u32 double_write_mode;
+static u32 double_write_mode = 0x200;
 
 /*#define DECOMP_HEADR_SURGENT*/
 
@@ -343,7 +343,7 @@ static u32 run_ready_display_q_num;
 static u32 run_ready_max_buf_num = 0xff;
 #endif
 
-static u32 dynamic_buf_num_margin = 7;
+static u32 dynamic_buf_num_margin = 8;
 static u32 buf_alloc_width;
 static u32 buf_alloc_height;
 
@@ -1876,7 +1876,13 @@ static int get_double_write_mode(struct hevc_state_s *hevc)
 			dw = 0x4; /*1:2*/
 		else
 			dw = 0x1; /*1:1*/
-
+	} else if (valid_dw_mode == 0x200) {
+		int w = hevc->pic_w;
+		int h = hevc->pic_h;
+		if (w > 4096 && h > 2176)
+			dw = 0x4; /*1:2*/
+		else
+			dw = 0x0; /*off*/
 	} else
 		dw = valid_dw_mode;
 	return dw;
@@ -1908,13 +1914,11 @@ static int hevc_print(struct hevc_state_s *hevc,
 #define HEVC_PRINT_BUF		256
 	unsigned char buf[HEVC_PRINT_BUF];
 	int len = 0;
-#ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	if (hevc == NULL ||
 		(flag == 0) ||
 		((debug_mask &
 		(1 << hevc->index))
 		&& (debug & flag))) {
-#endif
 		va_list args;
 
 		va_start(args, fmt);
@@ -1923,9 +1927,7 @@ static int hevc_print(struct hevc_state_s *hevc,
 		vsnprintf(buf + len, HEVC_PRINT_BUF - len, fmt, args);
 		pr_debug("%s", buf);
 		va_end(args);
-#ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	}
-#endif
 	return 0;
 }
 

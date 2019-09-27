@@ -55,13 +55,17 @@
 			compatible = "arm,cortex-a53","arm,armv8";
 			reg = <0x0 0x0>;
 			enable-method = "psci";
-//			cpu-idle-states = <&CPU_SLEEP_0>;
+			cpu-idle-states = <&CPU_SLEEP_0>;
 			clocks = <&clkc CLKID_CPU_CLK>,
 				<&clkc CLKID_CPU_FCLK_P>,
-				<&clkc CLKID_SYS_PLL>;
+				<&clkc CLKID_SYS_PLL>,
+				<&clkc CLKID_DSU_CLK>,
+				<&clkc CLKID_DSU_PRE_CLK>;
 			clock-names = "core_clk",
 				"low_freq_clk_parent",
-				"high_freq_clk_parent";
+				"high_freq_clk_parent",
+				"dsu_clk",
+				"dsu_pre_parent";
 			operating-points-v2 = <&cpu_opp_table0>;
 			cpu-supply = <&vddcpu0>;
 			voltage-tolerance = <0>;
@@ -73,13 +77,17 @@
 			compatible = "arm,cortex-a53","arm,armv8";
 			reg = <0x0 0x1>;
 			enable-method = "psci";
-//			cpu-idle-states = <&CPU_SLEEP_0>;
+			cpu-idle-states = <&CPU_SLEEP_0>;
 			clocks = <&clkc CLKID_CPU_CLK>,
 				<&clkc CLKID_CPU_FCLK_P>,
-				<&clkc CLKID_SYS_PLL>;
+				<&clkc CLKID_SYS_PLL>,
+				<&clkc CLKID_DSU_CLK>,
+				<&clkc CLKID_DSU_PRE_CLK>;
 			clock-names = "core_clk",
 				"low_freq_clk_parent",
-				"high_freq_clk_parent";
+				"high_freq_clk_parent",
+				"dsu_clk",
+				"dsu_pre_parent";
 			operating-points-v2 = <&cpu_opp_table0>;
 			cpu-supply = <&vddcpu0>;
 			voltage-tolerance = <0>;
@@ -91,13 +99,17 @@
 			compatible = "arm,cortex-a53","arm,armv8";
 			reg = <0x0 0x2>;
 			enable-method = "psci";
-//			cpu-idle-states = <&CPU_SLEEP_0>;
+			cpu-idle-states = <&CPU_SLEEP_0>;
 			clocks = <&clkc CLKID_CPU_CLK>,
 				<&clkc CLKID_CPU_FCLK_P>,
-				<&clkc CLKID_SYS_PLL>;
+				<&clkc CLKID_SYS_PLL>,
+				<&clkc CLKID_DSU_CLK>,
+				<&clkc CLKID_DSU_PRE_CLK>;
 			clock-names = "core_clk",
 				"low_freq_clk_parent",
-				"high_freq_clk_parent";
+				"high_freq_clk_parent",
+				"dsu_clk",
+				"dsu_pre_parent";
 			operating-points-v2 = <&cpu_opp_table0>;
 			cpu-supply = <&vddcpu0>;
 			voltage-tolerance = <0>;
@@ -109,13 +121,17 @@
 			compatible = "arm,cortex-a53","arm,armv8";
 			reg = <0x0 0x3>;
 			enable-method = "psci";
-//			cpu-idle-states = <&CPU_SLEEP_0>;
+			cpu-idle-states = <&CPU_SLEEP_0>;
 			clocks = <&clkc CLKID_CPU_CLK>,
 				<&clkc CLKID_CPU_FCLK_P>,
-				<&clkc CLKID_SYS_PLL>;
+				<&clkc CLKID_SYS_PLL>,
+				<&clkc CLKID_DSU_CLK>,
+				<&clkc CLKID_DSU_PRE_CLK>;
 			clock-names = "core_clk",
 				"low_freq_clk_parent",
-				"high_freq_clk_parent";
+				"high_freq_clk_parent",
+				"dsu_clk",
+				"dsu_pre_parent";
 			operating-points-v2 = <&cpu_opp_table0>;
 			cpu-supply = <&vddcpu0>;
 			voltage-tolerance = <0>;
@@ -128,9 +144,9 @@
 					compatible = "arm,idle-state";
 					arm,psci-suspend-param = <0x0010000>;
 					local-timer-stop;
-					entry-latency-us = <5000>;
+					entry-latency-us = <4000>;
 					exit-latency-us = <5000>;
-					min-residency-us = <15000>;
+					min-residency-us = <10000>;
 			};
 		};
 	};
@@ -183,12 +199,12 @@
 		method = "smc";
 	};
 
-	meson_suspend:pm {
+	aml_pm {
 		compatible = "amlogic, pm";
 		status = "okay";
 		device_name = "aml_pm";
-		reg = <0x0 0xff8000a8 0x0 0x4>,
-			<0x0 0xff80023c 0x0 0x4>;
+		debug_reg = <0xff8000a8>;
+		exit_reg = <0xff80023c>;
 	};
 
 	secmon {
@@ -460,7 +476,7 @@
 
 	jtag {
 		compatible = "amlogic, jtag";
-		status = "okay";
+		status = "disabled";
 		select = "disable"; /* disable/apao/apee */
 		pinctrl-names="jtag_apao_pins", "jtag_apee_pins";
 		pinctrl-0=<&jtag_apao_pins>;
@@ -756,6 +772,7 @@
 				compatible = "amlogic,sm1-clkc-2";
 				#clock-cells = <1>;
 				reg = <0x0 0x0 0x0 0x3dc>;
+				own-dsu-clk;
 			};
 		};/* end of hiubus*/
 
@@ -814,147 +831,32 @@
 	};
 
 	custom_maps:custom_maps {
-		mapnum = <3>;
+		mapnum = <1>;
 		map0 = <&map_0>;
-		map1 = <&map_1>;
-		map2 = <&map_2>;
 		map_0: map_0{
-			mapname = "amlogic-remote-1";
-			customcode = <0xfb04>;
+			mapname = "khadas-ir";
+			customcode = <0xff00>;
 			release_delay = <80>;
-			size  = <50>;   /*keymap size*/
-			keymap = <REMOTE_KEY(0x47, KEY_0)
-				REMOTE_KEY(0x13, KEY_1)
-				REMOTE_KEY(0x10, KEY_2)
-				REMOTE_KEY(0x11, KEY_3)
-				REMOTE_KEY(0x0F, KEY_4)
-				REMOTE_KEY(0x0C, KEY_5)
-				REMOTE_KEY(0x0D, KEY_6)
-				REMOTE_KEY(0x0B, KEY_7)
-				REMOTE_KEY(0x08, KEY_8)
-				REMOTE_KEY(0x09, KEY_9)
-				REMOTE_KEY(0x5C, KEY_RIGHTCTRL)
-				REMOTE_KEY(0x51, KEY_F3)
-				REMOTE_KEY(0x50, KEY_F4)
-				REMOTE_KEY(0x40, KEY_F5)
-				REMOTE_KEY(0x4d, KEY_F6)
-				REMOTE_KEY(0x43, KEY_F7)
-				REMOTE_KEY(0x17, KEY_F8)
-				REMOTE_KEY(0x00, KEY_F9)
-				REMOTE_KEY(0x01, KEY_F10)
-				REMOTE_KEY(0x16, KEY_F11)
-				REMOTE_KEY(0x49, KEY_BACKSPACE)
-				REMOTE_KEY(0x06, KEY_PROPS)
-				REMOTE_KEY(0x14, KEY_UNDO)
-				REMOTE_KEY(0x44, KEY_UP)
-				REMOTE_KEY(0x1D, KEY_DOWN)
-				REMOTE_KEY(0x1C, KEY_LEFT)
-				REMOTE_KEY(0x48, KEY_RIGHT)
-				REMOTE_KEY(0x53, KEY_LEFTMETA)
-				REMOTE_KEY(0x45, KEY_PAGEUP)
-				REMOTE_KEY(0x19, KEY_PAGEDOWN)
-				REMOTE_KEY(0x52, KEY_PAUSE)
-				REMOTE_KEY(0x05, KEY_HANGEUL)
-				REMOTE_KEY(0x59, KEY_HANJA)
-				REMOTE_KEY(0x1b, KEY_SCALE)
-				REMOTE_KEY(0x04, KEY_KPCOMMA)
-				REMOTE_KEY(0x1A, KEY_POWER)
-				REMOTE_KEY(0x0A, KEY_TAB)
-				REMOTE_KEY(0x0e, KEY_MUTE)
-				REMOTE_KEY(0x1F, KEY_HOME)
-				REMOTE_KEY(0x1e, KEY_FRONT)
-				REMOTE_KEY(0x07, KEY_COPY)
-				REMOTE_KEY(0x12, KEY_OPEN)
-				REMOTE_KEY(0x54, KEY_PASTE)
-				REMOTE_KEY(0x02, KEY_FIND)
-				REMOTE_KEY(0x4f, KEY_A)
-				REMOTE_KEY(0x42, KEY_B)
-				REMOTE_KEY(0x5d, KEY_C)
-				REMOTE_KEY(0x4c, KEY_D)
-				REMOTE_KEY(0x58, KEY_CUT)
-				REMOTE_KEY(0x55, KEY_CALC)>;
-		};
-		map_1: map_1{
-			mapname = "amlogic-remote-2";
-			customcode = <0xfe01>;
-			release_delay = <80>;
-			size  = <53>;
-			keymap = <REMOTE_KEY(0x01, KEY_1)
-				REMOTE_KEY(0x02, KEY_2)
-				REMOTE_KEY(0x03, KEY_3)
-				REMOTE_KEY(0x04, KEY_4)
-				REMOTE_KEY(0x05, KEY_5)
-				REMOTE_KEY(0x06, KEY_6)
-				REMOTE_KEY(0x07, KEY_7)
-				REMOTE_KEY(0x08, KEY_8)
-				REMOTE_KEY(0x09, KEY_9)
-				REMOTE_KEY(0x0a, KEY_0)
-				REMOTE_KEY(0x1F, KEY_FN_F1)
-				REMOTE_KEY(0x15, KEY_MENU)
-				REMOTE_KEY(0x16, KEY_TAB)
-				REMOTE_KEY(0x0c, KEY_CHANNELUP)
-				REMOTE_KEY(0x0d, KEY_CHANNELDOWN)
-				REMOTE_KEY(0x0e, KEY_VOLUMEUP)
-				REMOTE_KEY(0x0f, KEY_VOLUMEDOWN)
-				REMOTE_KEY(0x11, KEY_HOME)
-				REMOTE_KEY(0x1c, KEY_RIGHT)
-				REMOTE_KEY(0x1b, KEY_LEFT)
-				REMOTE_KEY(0x19, KEY_UP)
-				REMOTE_KEY(0x1a, KEY_DOWN)
-				REMOTE_KEY(0x1d, KEY_ENTER)
-				REMOTE_KEY(0x17, KEY_MUTE)
-				REMOTE_KEY(0x49, KEY_FINANCE)
-				REMOTE_KEY(0x43, KEY_BACK)
-				REMOTE_KEY(0x12, KEY_FN_F4)
-				REMOTE_KEY(0x14, KEY_FN_F5)
-				REMOTE_KEY(0x18, KEY_FN_F6)
-				REMOTE_KEY(0x59, KEY_INFO)
-				REMOTE_KEY(0x5a, KEY_STOPCD)
-				REMOTE_KEY(0x10, KEY_POWER)
-				REMOTE_KEY(0x42, KEY_PREVIOUSSONG)
-				REMOTE_KEY(0x44, KEY_NEXTSONG)
-				REMOTE_KEY(0x1e, KEY_REWIND)
-				REMOTE_KEY(0x4b, KEY_FASTFORWARD)
-				REMOTE_KEY(0x58, KEY_PLAYPAUSE)
-				REMOTE_KEY(0x46, KEY_PROPS)
-				REMOTE_KEY(0x40, KEY_UNDO)
-				REMOTE_KEY(0x38, KEY_SCROLLLOCK)
-				REMOTE_KEY(0x57, KEY_FN)
-				REMOTE_KEY(0x5b, KEY_FN_ESC)
-				REMOTE_KEY(0x54, KEY_RED)
-				REMOTE_KEY(0x4c, KEY_GREEN)
-				REMOTE_KEY(0x4e, KEY_YELLOW)
-				REMOTE_KEY(0x55, KEY_BLUE)
-				REMOTE_KEY(0x53, KEY_BLUETOOTH)
-				REMOTE_KEY(0x52, KEY_WLAN)
-				REMOTE_KEY(0x39, KEY_CAMERA)
-				REMOTE_KEY(0x41, KEY_SOUND)
-				REMOTE_KEY(0x0b, KEY_QUESTION)
-				REMOTE_KEY(0x00, KEY_CHAT)
-				REMOTE_KEY(0x13, KEY_SEARCH)>;
-		};
-		map_2: map_2{
-			mapname = "amlogic-remote-3";
-			customcode = <0xbd02>;
-			release_delay = <80>;
-			size  = <17>;
-			keymap = <REMOTE_KEY(0xca,103)
-			REMOTE_KEY(0xd2,108)
-			REMOTE_KEY(0x99,105)
-			REMOTE_KEY(0xc1,106)
-			REMOTE_KEY(0xce,97)
-			REMOTE_KEY(0x45,116)
-			REMOTE_KEY(0xc5,133)
-			REMOTE_KEY(0x80,113)
-			REMOTE_KEY(0xd0,15)
-			REMOTE_KEY(0xd6,125)
-			REMOTE_KEY(0x95,102)
-			REMOTE_KEY(0xdd,104)
-			REMOTE_KEY(0x8c,109)
-			REMOTE_KEY(0x89,131)
-			REMOTE_KEY(0x9c,130)
-			REMOTE_KEY(0x9a,120)
-			REMOTE_KEY(0xcd,121)>;
+			fn_key_scancode = <0x5b>;
+			cursor_left_scancode = <0x0e>;
+			cursor_right_scancode = <0x1a>;
+			cursor_up_scancode = <0x03>;
+			cursor_down_scancode = <0x02>;
+			cursor_ok_scancode = <0x07>;
+			size  = <13>;   /*keymap size*/
+			keymap = <REMOTE_KEY(0x14, 116)
+				REMOTE_KEY(0x13,139)
+				REMOTE_KEY(0x03,103)
+				REMOTE_KEY(0x02,108)
+				REMOTE_KEY(0x0e,105)
+				REMOTE_KEY(0x1a,106)
+				REMOTE_KEY(0x07,232)
+				REMOTE_KEY(0x58,114)
+				REMOTE_KEY(0x5c,63)
+				REMOTE_KEY(0x5b,63)
+				REMOTE_KEY(0x0b,115)
+				REMOTE_KEY(0x01,158)
+				REMOTE_KEY(0x48,102)>;
 		};
 	};
 
@@ -1079,7 +981,7 @@
 	galcore {
 		compatible = "amlogic, galcore";
 		dev_name = "galcore";
-		status = "disabled";
+		status = "okay";
 		clocks = <&clkc CLKID_VNANOQ_AXI_CLK_COMP>,
 			<&clkc CLKID_VNANOQ_CORE_CLK_COMP>;
 		clock-names = "cts_vipnanoq_axi_clk_composite",
@@ -1096,6 +998,7 @@
 			0x0 0xffd01088 0x0 0x0
 			/*0xffd01088:reset reg*/
 			>;
+		nn_efuse = <0xff63003c 0x20>;
 	};
 	aocec: aocec {
 		compatible = "amlogic, aocec-sm1";
@@ -2130,6 +2033,15 @@
 		mux {
 			groups = "i2c2_sda_z",
 				"i2c2_sck_z";
+			function = "i2c2";
+			drive-strength = <2>;
+		};
+	};
+
+	i2c2_master_pins3:i2c2_pins3 {
+		mux {
+			groups = "i2c2_sda_z10",
+				"i2c2_sck_z11";
 			function = "i2c2";
 			drive-strength = <2>;
 		};

@@ -11081,6 +11081,13 @@ F:	arch/arm/mach-s3c24xx/mach-bast.c
 F:	arch/arm/mach-s3c24xx/bast-ide.c
 F:	arch/arm/mach-s3c24xx/bast-irq.c
 
+SIPHASH PRF ROUTINES
+M:	Jason A. Donenfeld <Jason@zx2c4.com>
+S:	Maintained
+F:	lib/siphash.c
+F:	lib/test_siphash.c
+F:	include/linux/siphash.h
+
 TI DAVINCI MACHINE SUPPORT
 M:	Sekhar Nori <nsekhar@ti.com>
 M:	Kevin Hilman <khilman@kernel.org>
@@ -13540,6 +13547,11 @@ AMLOGIC boot config for M8B
 M: Tao Zeng <tao.zeng@amlogic.com>
 F: arch/arm/mach-meson/Makefile.boot
 
+AMLOGIC implementation for 32bit kasan
+M: Tao Zeng <tao.zeng@amlogic.com>
+F: arch/arm/include/asm/kasan.h
+F: arch/arm/mm/kasan_init.c
+
 HDMITX OUTPUT DRIVER
 M:	Yi Zhou <yi.zhou@amlogic.com>
 M:      Zongdong Jiao <zongdong.jiao@amlogic.com>
@@ -13796,13 +13808,10 @@ F: arch/arm/boot/dts/amlogic>
 ANLOGIC AUDIO
 M: Xing Wang <xing.wang@amlogic.com>
 M: Zhe Wang <Zhe.Wang@amlogic.com>
-F: arch/arm64/boot/dts/amlogic/gxl_p212_1g.dts
-F: arch/arm64/boot/dts/amlogic/gxl_p212_2g.dts
-F: arch/arm64/boot/dts/amlogic/gxl_p230_2g.dts
-F: arch/arm64/boot/dts/amlogic/gxm_q200_2g.dts
-F: arch/arm64/boot/dts/amlogic/gxm_skt.dts
-F: arch/arm64/boot/dts/amlogic/mesongxl.dtsi
-F: arch/arm64/boot/dts/amlogic/mesongxm.dtsi
+M: Shuai Li <shuai.li@amlogic.com>
+M: Jian Xu <jian.xu@amlogic.com>
+F: arch/arm64/boot/dts/amlogic/*
+F: arch/arm/boot/dts/amlogic/*
 F: arch/arm64/configs/meson64_defconfig
 F: drivers/amlogic/clk/clk-mpll.c
 F: drivers/amlogic/clk/clk_misc.c
@@ -13814,7 +13823,8 @@ F: include/dt-bindings/clock/amlogic,gxl-clkc.h
 F: include/linux/amlogic/media/sound/audin_regs.h
 F: sound/soc/Kconfig
 F: sound/soc/Makefile
-F: sound/soc/amlogic/*
+F: sound/soc/amlogic/auge/*
+F: sound/soc/amlogic/meson/*
 F: sound/soc/codecs/Kconfig
 F: sound/soc/codecs/Makefile
 F: sound/soc/codecs/amlogic/*
@@ -13921,6 +13931,7 @@ F:	drivers/amlogic/media/enhancement/amvecm/arch/*
 F:	drivers/amlogic/media/enhancement/amvecm/dnlp_algorithm/*
 F:	include/linux/amlogic/media/amvecm/*
 F:	drivers/amlogic/media/enhancement/amvecm/hdr/*
+F:      drivers/amlogic/media/enhancement/amvecm/amprime_sl/*
 
 AMLOGIC GXL ADD SKT DTS
 M: Yun Cai <yun.cai@amlogic.com>
@@ -14437,6 +14448,11 @@ M:	Zhilei Wu <zhilei.wu@amlogic.com>
 F:	drivers/amlogic/media/enhancement/amdolby_vision*
 F:	include/linux/amlogic/media/amdolbyvision/*
 
+AMLOGIC HDR PRIMSE SL DRIVER
+M:      Yi Zhou <yi.zhou@amlogic.com>
+F:      drivers/amlogic/media/enhancement/amprime_sl/*
+F:      include/linux/amlogic/media/amprime_sl/*
+
 AMLOGIC G12A Media codec io bus
 M:	Nanxin Qin <nanxin.qin@amlogic.com>
 F:	include/linux/amlogic/media/registers/regs/efuse_regs.h
@@ -14502,6 +14518,8 @@ F:      drivers/amlogic/media/dtv_demod/*
 AMLOGIC DTV DEMOD DRIVER
 M:      Zhiwei Yuan <zhiwei.yuan@amlogic.com>
 F:      drivers/amlogic/media/dtv_demod/include/addr_atsc*.h
+F:      drivers/amlogic/media/dtv_demod/include/demod_dbg.h
+F:      drivers/amlogic/media/dtv_demod/demod_dbg.c
 
 AMLOGIC DEFENDKEY DRIVER
 M:	Zhongfu Luo <zhongfu.luo@amlogic.com>
@@ -14511,6 +14529,7 @@ AMLOGIC DEBUG
 M: Jianxin Pan <jianxin.pan@amlogic.com>
 M: Tao Guo <tao.guo@amlogic.com>
 F:  drivers/amlogic/debug/*
+F: include/linux/amlogic/debug*.h
 
 AMLOGIC G12A spdif channel status
 M: xing wang<xing.wang@amlogic.com>
@@ -14688,6 +14707,14 @@ F:	include/linux/amlogic/media/sound/misc.h
 F:	include/linux/amlogic/major.h
 F:	sound/soc/amlogic/auge/*
 
+AMLOGIC TL1 AUDIO EXTERANL INPUT/OUTPUT DRIVERS
+AMLOGIC AUDIO New LOOPBACK DRIVERS
+M:	Xing Wang <xing.wang@amlogic.com
+F:	sound/soc/amlogic/auge/extn.c
+F:	sound/soc/amlogic/auge/frhdmirx_hw.c
+F:	sound/soc/amlogic/auge/frhdmirx_hw.h
+F:	sound/soc/amlogic/auge/*
+
 AMLOGIC LCD DRIVERS
 M:	Evoke Zhang <evoke.zhang@amlogic.com>
 F:	arch\arm\boot\dts\amlogic\mesontl1_pxp-panel.dtsi
@@ -14811,3 +14838,49 @@ F:	arch/arm64/boot/dts/amlogic/g12a_s905x2_u212.dts
 F:	arch/arm64/boot/dts/amlogic/g12a_s905x2_u212_1g.dts
 F:	arch/arm/boot/dts/amlogic/sm1_s905x3_ac213.dts
 F:	arch/arm64/boot/dts/amlogic/sm1_s905x3_ac213.dts
+
+AMLOGIC SM1 MIPI CSI DRIVER
+M:	Guosong Zhou <guosong.zhou@amlogic.com>
+F:	arch/arm/boot/dts/amlogic/sm1_s905d3_ac200.dts
+F:	arch/arm/boot/dts/amlogic/mesonsm1.dtsi
+F:	arch/arm/configs/meson64_a32_defconfig
+F:	arch/arm64/boot/dts/amlogic/sm1_s905d3_ac200.dts
+F:	arch/arm64/boot/dts/amlogic/mesonsm1.dtsi
+F:	arch/arm64/configs/meson64_defconfig
+F:	drivers/amlogic/clk/g12a/g12a.h
+F:	include/dt-bindings/clock/amlogic,g12a-clkc.h
+F:	drivers/amlogic/clk/sm1/sm1.c
+F:	drivers/amlogic/media/camera/Makefile
+F:	drivers/amlogic/media/camera/common/cam_prober.c
+F:	drivers/amlogic/media/vin/tvin/Kconfig
+F:	drivers/amlogic/media/vin/tvin/Makefile
+F:	include/linux/amlogic/media/camera/aml_cam_info.h
+F:	drivers/amlogic/media/camera/ov5640.c
+F:	drivers/amlogic/media/camera/ov5640_firmware.h
+F:	drivers/amlogic/media/vin/tvin/csi/*
+F:	include/linux/amlogic/media/mipi/*
+
+AMLOGIC SM1 S905D3 AC202
+M:	LUAN YUAN <luan.yuan@amlogic.com>
+F:	arch/arm64/boot/dts/amlogic/sm1_s905d3_ac202*
+
+AMLOGIC HYN_CST2XX TOUCHSCREEN
+M:	XINLIANG ZHANG <xinliang.zhang@amlogic.com>
+F:	drivers/amlogic/input/touchscreen/hyn_cst2xx/*
+
+AMLOGIC GXL P281 DTS
+M:  Luan Yuan <luan.yuan@amlogic.com>
+F:  arch/arm/boot/dts/amlogic/gxl_p281_1g.dts
+F:  arch/arm/boot/dts/amlogic/gxl_p281_2g.dts
+F:  arch/arm64/boot/dts/amlogic/gxl_p281_1g.dts
+F:  arch/arm64/boot/dts/amlogic/gxl_p281_2g.dts
+
+AMLOGIC CAMERA GC2145 MIPI DRIVER
+M:  Guosong Zhou <guosong.zhou@amlogic.com>
+F:  arch/arm/boot/dts/amlogic/sm1_s905d3_ac202.dts
+F:  arch/arm/boot/dts/amlogic/sm1_s905d3_ac202_1g.dts
+F:  arch/arm/configs/meson64_a32_defconfig
+F:  arch/arm64/boot/dts/amlogic/sm1_s905d3_ac202.dts
+F:  arch/arm64/boot/dts/amlogic/sm1_s905d3_ac202_1g.dts
+F:  arch/arm64/configs/meson64_defconfig
+F:  drivers/amlogic/media/camera/gc2145_mipi.c

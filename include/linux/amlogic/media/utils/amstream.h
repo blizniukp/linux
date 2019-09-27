@@ -264,6 +264,7 @@ enum FRAME_BASE_VIDEO_PATH {
 	FRAME_BASE_PATH_AMVIDEO2,
 	FRAME_BASE_PATH_V4L_VIDEO,
 	FRAME_BASE_PATH_TUNNEL_MODE,
+	FRAME_BASE_PATH_V4L_OSD,
 	FRAME_BASE_PATH_MAX
 };
 
@@ -300,12 +301,20 @@ struct buf_status {
 
 #define DECODER_ERROR_MASK	(0xffff<<16)
 
+
+enum E_ASPECT_RATIO {
+	ASPECT_RATIO_4_3,
+	ASPECT_RATIO_16_9,
+	ASPECT_UNDEFINED = 255
+};
+
 struct vdec_status {
 	unsigned int width;
 	unsigned int height;
 	unsigned int fps;
 	unsigned int error_count;
 	unsigned int status;
+	enum E_ASPECT_RATIO euAspectRatio;
 };
 
 struct vdec_info {
@@ -325,6 +334,7 @@ struct vdec_info {
 	unsigned long long total_data;
 	unsigned int samp_cnt;
 	unsigned int offset;
+	unsigned int ratio_control;
 	char reserved[32];
 };
 
@@ -682,10 +692,10 @@ struct am_ioctl_parm_ptr {
 	u32 len; /*char reserved[4]; */
 };
 
-#define SUPPORT_VDEC_NUM	(20)
+#define SUPPORT_VDEC_NUM	(64)
 int vcodec_profile_register(const struct codec_profile_t *vdec_profile);
 ssize_t vcodec_profile_read(char *buf);
-
+bool is_support_profile(char *name);
 #ifdef __KERNEL__
 #include <linux/interrupt.h>
 

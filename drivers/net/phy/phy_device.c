@@ -136,7 +136,7 @@ static int mdio_bus_phy_resume(struct device *dev)
 	struct phy_device *phydev = to_phy_device(dev);
 	int ret;
 
-	if (!mdio_bus_phy_may_suspend(phydev))
+	if (!phydev->suspended)
 		goto no_resume;
 
 	ret = phy_resume(phydev);
@@ -676,6 +676,9 @@ int phy_connect_direct(struct net_device *dev, struct phy_device *phydev,
 {
 	int rc;
 
+	if (!dev)
+		return -EINVAL;
+
 	rc = phy_attach_direct(dev, phydev, phydev->dev_flags, interface);
 	if (rc)
 		return rc;
@@ -967,6 +970,9 @@ struct phy_device *phy_attach(struct net_device *dev, const char *bus_id,
 	struct phy_device *phydev;
 	struct device *d;
 	int rc;
+
+	if (!dev)
+		return ERR_PTR(-EINVAL);
 
 	/* Search the list of PHY devices on the mdio bus for the
 	 * PHY with the requested name

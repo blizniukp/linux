@@ -39,6 +39,7 @@
 #ifdef CONFIG_AMLOGIC_CMA
 #include <asm/pgtable.h>
 #include <linux/amlogic/aml_cma.h>
+#include <linux/amlogic/secmon.h>
 #endif /* CONFIG_AMLOGIC_CMA */
 
 #include "cma.h"
@@ -225,8 +226,10 @@ static int __init cma_activate_area(struct cma *cma)
 
 	cma->bitmap = kzalloc(bitmap_size, GFP_KERNEL);
 
-	if (!cma->bitmap)
+	if (!cma->bitmap) {
+		cma->count = 0;
 		return -ENOMEM;
+	}
 
 	WARN_ON_ONCE(!pfn_valid(pfn));
 	zone = page_zone(pfn_to_page(pfn));
@@ -279,10 +282,22 @@ static int __init cma_init_reserved_areas(void)
 		if (ret)
 			return ret;
 	}
-
+#ifdef CONFIG_AMLOGIC_SEC
+	/*
+	 * A73 cache speculate prefetch may cause SError when boot.
+	 * because it may prefetch cache line in secure memory range
+	 * which have already reserved by bootloader. So we must
+	 * clear mmu of secmon range before A73 core boot up
+	 */
+	secmon_clear_cma_mmu();
+#endif
 	return 0;
 }
+#ifdef CONFIG_AMLOGIC_CMA
+early_initcall(cma_init_reserved_areas);
+#else
 core_initcall(cma_init_reserved_areas);
+#endif
 
 /**
  * cma_init_reserved_mem() - create custom contiguous area from reserved memory
@@ -396,6 +411,12 @@ int __init cma_declare_contiguous(phys_addr_t base,
 	 */
 	alignment = max(alignment,  (phys_addr_t)PAGE_SIZE <<
 			  max_t(unsigned long, MAX_ORDER - 1, pageblock_order));
+	if (fixed && base & (alignment - 1)) {
+		ret = -EINVAL;
+		pr_err("Region at %pa must be aligned to %pa bytes\n",
+			&base, &alignment);
+		goto err;
+	}
 	base = ALIGN(base, alignment);
 	size = ALIGN(size, alignment);
 	limit &= ~(alignment - 1);
@@ -425,6 +446,13 @@ int __init cma_declare_contiguous(phys_addr_t base,
 	 */
 	if (limit == 0 || limit > memblock_end)
 		limit = memblock_end;
+
+	if (base + size > limit) {
+		ret = -EINVAL;
+		pr_err("Size (%pa) of region at %pa exceeds limit (%pa)\n",
+			&size, &base, &limit);
+		goto err;
+	}
 
 	/* Reserve memory */
 	if (fixed) {

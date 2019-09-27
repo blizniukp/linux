@@ -392,7 +392,7 @@
 #define VPP_OSD_SCALE_COEF_IDX 0x1dcc
 #define VPP_OSD_SCALE_COEF 0x1dcd
 #define VPP_INT_LINE_NUM 0x1dce
-
+#define VPP_OSD_SCALE_CTRL 0x1dff
 /* osd2 scaler */
 #define OSD2_VSC_PHASE_STEP 0x3d00
 #define OSD2_VSC_INI_PHASE 0x3d01
@@ -1424,6 +1424,7 @@
 #define VPP_POST_BLEND_DUMMY_ALPHA                 0x3969
 #define VPP_RDARB_MODE                             0x3978
 #define VPP_RDARB_REQEN_SLV                        0x3979
+#define VPU_WRARB_MODE_L2C1                        0x27a2
 #define VPU_RDARB_MODE_L2C1                        0x279d
 
 /*VIU2 osd1 reg*/

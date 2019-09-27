@@ -292,6 +292,29 @@ enum ve_pq_timing_e {
 	TIMING_MAX,
 };
 
+enum vlock_hw_ver_e {
+	/*gxtvbb*/
+	vlock_hw_org,
+	/*
+	 *txl
+	 *txlx
+	 */
+	vlock_hw_ver1,
+	/* tl1 later
+	 * fix bug:i problem
+	 * fix bug:affect ss function
+	 * add: phase lock
+	 */
+	vlock_hw_ver2,
+};
+
+struct vecm_match_data_s {
+	u32 vlk_support;
+	u32 vlk_new_fsm;
+	enum vlock_hw_ver_e vlk_hwver;
+	u32 vlk_phlock_en;
+};
+
 /*overscan:
  *length 0~31bit :number of crop;
  *src_timing: bit31: on: load/save all crop
@@ -441,5 +464,6 @@ extern int amvecm_drm_gamma_disable(u32 index);
 extern int am_meson_ctm_set(u32 index, struct drm_color_ctm *ctm);
 extern int am_meson_ctm_disable(void);
 
+extern void enable_osd1_mtx(unsigned int en);
 #endif /* AMVECM_H */
 

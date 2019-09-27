@@ -127,6 +127,7 @@ static u32 stat;
 static u32 buf_size = 32 * 1024 * 1024;
 static u32 buf_offset;
 static u32 avi_flag;
+static u32 keyframe_pts_only;
 static u32 vvc1_ratio;
 static u32 vvc1_format;
 
@@ -137,6 +138,8 @@ static u32 pts_by_offset = 1;
 static u32 total_frame;
 static u32 next_pts;
 static u64 next_pts_us64;
+static u32 next_IP_pts;
+static u64 next_IP_pts_us64;
 static bool is_reset;
 static struct work_struct set_clk_work;
 static struct work_struct error_wd_work;
@@ -277,7 +280,7 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 	u32 picture_type;
 	u32 buffer_index;
 	unsigned int pts, pts_valid = 0, offset = 0;
-	u32 v_width, v_height;
+	u32 v_width, v_height, dur;
 	u64 pts_us64 = 0;
 
 	reg = READ_VREG(VC1_BUFFEROUT);
@@ -300,6 +303,9 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 			vvc1_amstream_dec_info.height = v_height;
 			frame_height = v_height;
 		}
+		repeat_count = READ_VREG(VC1_REPEAT_COUNT);
+		buffer_index = reg & 0x7;
+		picture_type = (reg >> 3) & 7;
 
 		if (pts_by_offset) {
 			offset = READ_VREG(VC1_OFFSET_REG);
@@ -307,6 +313,24 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 					PTS_TYPE_VIDEO,
 					offset, &pts, 0, &pts_us64) == 0) {
 				pts_valid = 1;
+				if (keyframe_pts_only) {
+					//pr_info("PT:%d rpc:%d pts64:%lld\n", picture_type , repeat_count, pts_us64);
+					dur = DUR2PTS(vvc1_amstream_dec_info.rate);
+					if (picture_type == B_PICTURE)
+					{
+						next_IP_pts = pts;
+						next_IP_pts_us64 = pts_us64;
+						pts -= dur;
+						pts_us64 -= (dur * 100) / 9;
+					}
+					else if (next_IP_pts)
+					{
+						pts = next_IP_pts;
+						next_IP_pts = 0;
+						pts_us64 = next_IP_pts_us64;
+						next_IP_pts_us64 = 0;
+					}
+				}
 #ifdef DEBUG_PTS
 				pts_hit++;
 #endif
@@ -358,10 +382,10 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 					frm.end_pts = pts;
 					frm.rate = (frm.end_pts -
 						frm.start_pts) / frm.num;
-					pr_info("frate before=%d,%d,num=%d\n",
-					frm.rate,
-					DUR2PTS(vvc1_amstream_dec_info.rate),
-					frm.num);
+					//pr_info("frate before=%d,%d,num=%d\n",
+					//frm.rate,
+					//DUR2PTS(vvc1_amstream_dec_info.rate),
+					//frm.num);
 					/* check if measured rate is same as
 					 * settings from upper layer
 					 * and correct it if necessary
@@ -382,10 +406,10 @@ static irqreturn_t vvc1_isr(int irq, void *dev_id)
 						vvc1_amstream_dec_info.rate),
 						RATE_30_FPS,
 						RATE_CORRECTION_THRESHOLD))) {
-						pr_info(
-						"vvc1: frate from %d to %d\n",
-						vvc1_amstream_dec_info.rate,
-						PTS2DUR(frm.rate));
+						//pr_info(
+						//"vvc1: frate from %d to %d\n",
+						//vvc1_amstream_dec_info.rate,
+						//PTS2DUR(frm.rate));
 
 						vvc1_amstream_dec_info.rate =
 							PTS2DUR(frm.rate);
@@ -919,13 +943,16 @@ static void vvc1_local_init(void)
 	/* vvc1_ratio = vvc1_amstream_dec_info.ratio; */
 	vvc1_ratio = 0x100;
 
-	avi_flag = (unsigned long) vvc1_amstream_dec_info.param;
+	avi_flag = (unsigned long) vvc1_amstream_dec_info.param & 0x1;
+	keyframe_pts_only = (unsigned long)vvc1_amstream_dec_info.param & 0x100;
 
 	total_frame = 0;
 
 	next_pts = 0;
 
 	next_pts_us64 = 0;
+	next_IP_pts = 0;
+	next_IP_pts_us64 = 0;
 	saved_resolution = 0;
 	frame_width = frame_height = frame_dur = 0;
 #ifdef DEBUG_PTS

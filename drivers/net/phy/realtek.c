@@ -50,6 +50,8 @@ static int wol_enable = 0;
 
 #ifdef CONFIG_AMLOGIC_ETH_PRIVE
 unsigned int support_external_phy_wol;
+unsigned int external_rx_delay;
+unsigned int external_tx_delay;
 #endif
 
 static int __init init_wol_state(char *str)
@@ -190,6 +192,23 @@ static int rtl8211f_config_init(struct phy_device *phydev)
 
 	phy_write(phydev, 0x11, reg);
 #ifdef CONFIG_AMLOGIC_ETH_PRIVE
+	/*switch page d08*/
+	phy_write(phydev, RTL8211F_PAGE_SELECT, 0xd08);
+	reg = phy_read(phydev, 0x15);
+	if (external_rx_delay) {
+		/*add 2ns delay for rx*/
+		phy_write(phydev, 0x15, reg | 0x8);
+	} else {
+		/*del 2ns rx*/
+		phy_write(phydev, 0x15, reg & 0xfff7);
+	}
+
+	if (external_tx_delay) {
+		reg = phy_read(phydev, 0x11);
+		phy_write(phydev, 0x11, reg | 0x100);
+	}
+	phy_write(phydev, RTL8211F_PAGE_SELECT, 0x0);
+
 	/*disable clk_out pin 35 set page 0x0a43 reg25.0 as 0*/
 	phy_write(phydev, RTL8211F_PAGE_SELECT, 0x0a43);
 	reg = phy_read(phydev, 0x19);
@@ -228,6 +247,14 @@ int rtl8211f_suspend(struct phy_device *phydev)
 		printk("rtl8211f_suspend...\n");
 		enable_wol((wol_enable << 0), false);
 	} else {
+		int value;
+
+		/*pin 31 pull high*/
+		phy_write(g_phydev, RTL8211F_PAGE_SELECT, 0xd40);
+		value = phy_read(g_phydev, 0x16);
+		phy_write(g_phydev, 0x16, value | (1 << 5));
+		phy_write(g_phydev, RTL8211F_PAGE_SELECT, 0);
+
 		genphy_suspend(phydev);
 	}
 	return 0;
@@ -252,7 +279,7 @@ int rtl8211f_resume(struct phy_device *phydev)
 		phy_write(phydev, RTL8211F_PAGE_SELECT, 0);
 		mutex_unlock(&phydev->lock);
 	} else {
-		genphy_resume(phydev);
+		rtl8211f_config_init(phydev);
 	}
 	pr_debug("%s %d\n", __func__, __LINE__);
 

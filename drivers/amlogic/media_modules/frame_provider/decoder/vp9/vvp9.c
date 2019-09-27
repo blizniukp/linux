@@ -162,7 +162,7 @@ static u32 mv_buf_margin;
 					  4, (1/2):(1/2) ratio
 					0x10, double write only
 */
-static u32 double_write_mode;
+static u32 double_write_mode = 0x200;
 
 #define DRIVER_NAME "amvdec_vp9"
 #define MODULE_NAME "amvdec_vp9"
@@ -1507,7 +1507,7 @@ static int get_double_write_mode(struct VP9Decoder_s *pbi)
 {
 	u32 valid_dw_mode = get_valid_double_write_mode(pbi);
 	u32 dw;
-	if (valid_dw_mode == 0x100) {
+	if (valid_dw_mode == 0x100 || valid_dw_mode == 0x200) {
 		struct VP9_Common_s *cm = &pbi->common;
 		struct PIC_BUFFER_CONFIG_s *cur_pic_config;
 		int w, h;
@@ -1517,10 +1517,17 @@ static int get_double_write_mode(struct VP9Decoder_s *pbi)
 		cur_pic_config = &cm->cur_frame->buf;
 		w = cur_pic_config->y_crop_width;
 		h = cur_pic_config->y_crop_width;
-		if (w > 1920 && h > 1088)
-			dw = 0x4; /*1:2*/
-		else
-			dw = 0x1; /*1:1*/
+		if (valid_dw_mode == 0x100) {
+			if (w > 1920 && h > 1088)
+				dw = 0x4; /*1:2*/
+			else
+				dw = 0x1; /*1:1*/
+		} else {
+			if (w > 4096 && h > 2176)
+				dw = 0x4; /*1:2*/
+			else
+				dw = 0x0; /*off*/
+		}
 
 		return dw;
 	}
@@ -1540,6 +1547,16 @@ static int get_double_write_mode_init(struct VP9Decoder_s *pbi)
 			dw = 0x4; /*1:2*/
 		else
 			dw = 0x1; /*1:1*/
+
+		return dw;
+	} else if (valid_dw_mode == 0x200) {
+		u32 dw;
+		int w = pbi->init_pic_w;
+		int h = pbi->init_pic_h;
+		if (w > 4096 && h > 2176)
+			dw = 0x4; /*1:2*/
+		else
+			dw = 0x0; /*off*/
 
 		return dw;
 	}
@@ -6881,7 +6898,7 @@ static int prepare_display_buf(struct VP9Decoder_s *pbi,
 		decoder_do_frame_check(hw_to_vdec(pbi), vf);
 		kfifo_put(&pbi->display_q, (const struct vframe_s *)vf);
 		pbi->vf_pre_count++;
-#ifndef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
+#ifdef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 		/*count info*/
 		gvs->frame_dur = pbi->frame_dur;
 		vdec_count_info(gvs, 0, stream_offset);
@@ -7809,7 +7826,7 @@ int vvp9_dec_status(struct vdec_s *vdec, struct vdec_info *vstatus)
 	vstatus->error_count = 0;
 	vstatus->status = vp9->stat | vp9->fatal_error;
 	vstatus->frame_dur = vp9->frame_dur;
-#ifndef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
+#if 0	//#ifndef CONFIG_AMLOGIC_MEDIA_MULTI_DEC
 	vstatus->bit_rate = gvs->bit_rate;
 	vstatus->frame_data = gvs->frame_data;
 	vstatus->total_data = gvs->total_data;

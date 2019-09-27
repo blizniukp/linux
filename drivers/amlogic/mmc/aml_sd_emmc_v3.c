@@ -231,10 +231,9 @@ static int meson_mmc_clk_set_rate_v3(struct mmc_host *mmc,
 
 	if (aml_card_type_mmc(pdata)) {
 		if ((clk_ios >= 200000000) && conf->ddr) {
-			if (host->data->chip_type == MMC_CHIP_G12B)
-				src0_clk = devm_clk_get(host->dev, "clkin3");
-			else
-				src0_clk = devm_clk_get(host->dev, "clkin2");
+			src0_clk = devm_clk_get(host->dev, "clkin2");
+			if (ret)
+				pr_warn("not get clkin2\n");
 			ret = clk_set_parent(host->mux_parent[0], src0_clk);
 			if (ret)
 				pr_warn("set src0 as comp0 parent error\n");
@@ -242,19 +241,20 @@ static int meson_mmc_clk_set_rate_v3(struct mmc_host *mmc,
 					host->mux_parent[0]);
 			if (ret)
 				pr_warn("set comp0 as mux_clk parent error\n");
-		} else if (((host->data->chip_type == MMC_CHIP_TL1)
+/*		} else if (((host->data->chip_type >= MMC_CHIP_TL1)
 				|| (host->data->chip_type == MMC_CHIP_G12B))
 				&& (clk_ios >= 166000000)) {
-			src0_clk = devm_clk_get(host->dev, "clkin3");
+			src0_clk = devm_clk_get(host->dev, "clkin2");
 			if (ret)
-				pr_warn("not get clkin3\n");
-			if (host->data->chip_type == MMC_CHIP_TL1) {
+				pr_warn("not get clkin2\n");
+			if ((host->data->chip_type == MMC_CHIP_TL1)
+				&& (clk_ios <= 198000000)) {
 				ret = clk_set_rate(src0_clk, 792000000);
 				if (ret)
-					pr_warn("not set tl1-792\n");
+					pr_warn("not set tl1-gp0\n");
 			}
-			pr_warn("set rate clkin3>>>>>>>>clk:%lu\n",
-					clk_get_rate(src0_clk));
+			pr_warn("set rate clkin2>>>>>>>>clk:%lu\n",
+						clk_get_rate(src0_clk));
 			ret = clk_set_parent(host->mux_parent[0],
 					src0_clk);
 			if (ret)
@@ -263,6 +263,7 @@ static int meson_mmc_clk_set_rate_v3(struct mmc_host *mmc,
 					host->mux_parent[0]);
 			if (ret)
 				pr_warn("set comp0 as mux_clk parent error\n");
+*/
 		} else if (clk_get_rate(host->mux_parent[0]) > 200000000) {
 			pr_info("%s %d\n", __func__, __LINE__);
 			src0_clk = devm_clk_get(host->dev, "xtal");
@@ -505,7 +506,6 @@ void meson_mmc_set_ios_v3(struct mmc_host *mmc,
 			&& (host->init_volt == 0))
 		complete(&host->drv_completion);
 }
-
 
 irqreturn_t meson_mmc_irq_thread_v3(int irq, void *dev_id)
 {
@@ -1614,6 +1614,7 @@ int aml_emmc_hs200_tl1(struct mmc_host *mmc)
 	writel(vclkc, host->base + SD_EMMC_CLOCK_V3);
 	pr_info("[%s][%d] clk config:0x%x\n",
 		__func__, __LINE__, readl(host->base + SD_EMMC_CLOCK_V3));
+
 	for (i = 0; i < 63; i++) {
 		retry_times = 0;
 		delay2 += (1 << 24);
@@ -1622,6 +1623,7 @@ retry:
 		err = emmc_eyetest_log(mmc, 9);
 		if (err)
 			continue;
+
 		count = fbinary(pdata->align[9]);
 		if (((count >= 14) && (count <= 20))
 			|| ((count >= 48) && (count <= 54))) {
@@ -1939,11 +1941,10 @@ int aml_post_hs400_timming(struct mmc_host *mmc)
 	struct amlsd_platform *pdata = mmc_priv(mmc);
 	struct amlsd_host *host = pdata->host;
 	aml_sd_emmc_clktest(mmc);
-	if ((host->data->chip_type == MMC_CHIP_TL1)
-		|| (host->data->chip_type == MMC_CHIP_SM1))
-		aml_emmc_hs400_tl1(mmc);
-	else if (host->data->chip_type == MMC_CHIP_G12B)
+	if (host->data->chip_type == MMC_CHIP_G12B)
 		aml_emmc_hs400_Revb(mmc);
+	else if (host->data->chip_type >= MMC_CHIP_TL1)
+		aml_emmc_hs400_tl1(mmc);
 	else
 		aml_emmc_hs400_general(mmc);
 	return 0;

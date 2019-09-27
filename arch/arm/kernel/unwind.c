@@ -407,7 +407,13 @@ int unwind_frame(struct stackframe *frame)
 
 	idx = unwind_find_idx(frame->pc);
 	if (!idx) {
+	#ifdef CONFIG_AMLOGIC_KASAN32
+		/* avoid FUCKING close source ko print too many here */
+		if (frame->pc > PAGE_OFFSET)
+			pr_warn("unwind: Index not found %08lx\n", frame->pc);
+	#else
 		pr_warn("unwind: Index not found %08lx\n", frame->pc);
+	#endif
 		return -URC_FAILURE;
 	}
 

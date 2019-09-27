@@ -58,6 +58,8 @@
 #include <linux/amlogic/media/vout/hdmi_tx/hdmi_tx_module.h>
 #include <linux/amlogic/media/vout/hdmi_tx/hdmi_config.h>
 #include "hw/tvenc_conf.h"
+#include "hw/hdmi_tx_reg.h"
+#include "hw/mach_reg.h"
 #include "hw/common.h"
 #include "hw/hw_clk.h"
 #include "hdmi_tx_hdcp.h"
@@ -109,6 +111,7 @@ struct extcon_dev *hdmitx_extcon_power;
 struct extcon_dev *hdmitx_extcon_hdr;
 struct extcon_dev *hdmitx_extcon_rxsense;
 struct extcon_dev *hdmitx_extcon_hdcp;
+struct extcon_dev *hdmitx_extcon_cedst;
 
 static inline void hdmitx_notify_hpd(int hpd)
 {
@@ -440,6 +443,10 @@ static int set_disp_mode_auto(void)
 	struct hdmi_format_para *para = NULL;
 	unsigned char mode[32];
 	enum hdmi_vic vic = HDMI_Unknown;
+//	char* pix_fmt[] = {"RGB","YUV422","YUV444","YUV420"};
+//	char* eotf[] = {"SDR","HDR","HDR10","HLG"};
+//	char* range[] = {"default","limited","full"};
+
 	/* vic_ready got from IP */
 	enum hdmi_vic vic_ready = hdev->HWOp.GetState(
 		hdev, STAT_VIDEO_VIC, 0);
@@ -477,6 +484,8 @@ static int set_disp_mode_auto(void)
 		hdev->HWOp.CntlConfig(hdev, CONF_CLR_VSDB_PACKET, 0);
 		hdev->HWOp.CntlMisc(hdev, MISC_TMDS_PHY_OP, TMDS_PHY_DISABLE);
 		hdev->para = hdmi_get_fmt_name("invalid", hdev->fmt_attr);
+		if (hdev->cedst_policy)
+			cancel_delayed_work(&hdev->work_cedst);
 		return -1;
 	}
 	strncpy(mode, info->name, sizeof(mode));
@@ -523,7 +532,7 @@ static int set_disp_mode_auto(void)
 	else {
 	/* nothing */
 	}
-	if ((vic_ready != HDMI_Unknown) && (vic_ready == vic)) {
+	if ((vic_ready != HDMI_Unknown) && (vic_ready == vic) && (strstr(hdmitx_device.fmt_attr,"now") == NULL)) {
 		pr_info(SYS "[%s] ALREADY init VIC = %d\n",
 			__func__, vic);
 		if (hdev->RXCap.ieeeoui == 0) {
@@ -548,6 +557,10 @@ static int set_disp_mode_auto(void)
 
 	hdmitx_pre_display_init();
 
+
+	if (strstr(hdmitx_device.fmt_attr,"now") != NULL){
+		memcpy(strstr(hdmitx_device.fmt_attr,"now"), " ", 3);
+	}
 	hdev->cur_VIC = HDMI_Unknown;
 /* if vic is HDMI_Unknown, hdmitx_set_display will disable HDMI */
 	ret = hdmitx_set_display(hdev, vic);
@@ -573,6 +586,10 @@ static int set_disp_mode_auto(void)
 		}
 	}
 	hdmitx_set_audio(hdev, &(hdev->cur_audio_param));
+	if (hdev->cedst_policy) {
+		cancel_delayed_work(&hdev->work_cedst);
+		queue_delayed_work(hdev->cedst_wq, &hdev->work_cedst, 0);
+	}
 	hdev->output_blank_flag = 1;
 	hdev->ready = 1;
 	return ret;
@@ -610,6 +627,10 @@ ssize_t store_attr(struct device *dev,
 {
 	strncpy(hdmitx_device.fmt_attr, buf, sizeof(hdmitx_device.fmt_attr));
 	hdmitx_device.fmt_attr[15] = '\0';
+	if (strstr(hdmitx_device.fmt_attr,"now")){
+		set_disp_mode_auto();
+	}
+return count;
 	return count;
 }
 /*aud_mode attr*/
@@ -1791,6 +1812,11 @@ static ssize_t show_config(struct device *dev,
 	int pos = 0;
 	unsigned char *conf;
 	struct hdmitx_dev *hdev = &hdmitx_device;
+	char* pix_fmt[] = {"RGB","YUV422","YUV444","YUV420"};
+	char* eotf[] = {"SDR","HDR","HDR10","HLG"};
+	char* range[] = {"default","limited","full"};
+	char* colourimetry[] = {"default", "BT.601", "BT.709", "xvYCC601","xvYCC709",
+	"sYCC601","Adobe_YCC601","Adobe_RGB","BT.2020c","BT.2020nc","P3 D65","P3 DCI"};
 
 	pos += snprintf(buf+pos, PAGE_SIZE, "cur_VIC: %d\n", hdev->cur_VIC);
 	if (hdev->cur_video_param)
@@ -1798,10 +1824,26 @@ static ssize_t show_config(struct device *dev,
 			"cur_video_param->VIC=%d\n",
 			hdev->cur_video_param->VIC);
 	if (hdev->para) {
-		pos += snprintf(buf+pos, PAGE_SIZE, "cd = %d\n",
-			hdev->para->cd);
-		pos += snprintf(buf+pos, PAGE_SIZE, "cs = %d\n",
-			hdev->para->cs);
+		struct hdmi_format_para *para;
+		para = hdev->para;
+
+		pos += snprintf(buf+pos, PAGE_SIZE, "VIC: %d %s\n",
+				hdmitx_device.cur_VIC, para->name);
+		pos += snprintf(buf + pos, PAGE_SIZE, "Colour depth: %d-bit\nColourspace: %s\nColour range: %s\nEOTF: %s\nYCC colour range: %s\n",
+				(((hdmitx_rd_reg(HDMITX_DWC_TX_INVID0) & 0x6) >> 1) + 4 ) * 2,
+				pix_fmt[(hdmitx_rd_reg(HDMITX_DWC_FC_AVICONF0) & 0x3)],
+				range[(hdmitx_rd_reg(HDMITX_DWC_FC_AVICONF2) & 0xc) >> 2],
+				eotf[(hdmitx_rd_reg(HDMITX_DWC_FC_DRM_PB00) & 7)],
+				range[((hdmitx_rd_reg(HDMITX_DWC_FC_AVICONF3) & 0xc) >> 2) + 1]);
+        if (((hdmitx_rd_reg(HDMITX_DWC_FC_AVICONF1) & 0xc0) >> 6) < 0x3)
+			pos += snprintf(buf + pos, PAGE_SIZE, "Colourimetry: %s\n",
+					colourimetry[(hdmitx_rd_reg(HDMITX_DWC_FC_AVICONF1) & 0xc0) >> 6]);
+        else
+			pos += snprintf(buf + pos, PAGE_SIZE, "Colourimetry: %s\n",
+					colourimetry[((hdmitx_rd_reg(HDMITX_DWC_FC_AVICONF2) & 0x70) >> 4) + 3]);
+		pos += snprintf(buf + pos, PAGE_SIZE, "PLL clock: 0x%08x, Vid clock div 0x%08x\n",
+				hd_read_reg(P_HHI_HDMI_PLL_CNTL),
+				hd_read_reg(P_HHI_VID_PLL_CLK_DIV));
 	}
 
 	switch (hdev->tx_aud_cfg) {
@@ -1875,7 +1917,7 @@ static ssize_t show_config(struct device *dev,
 		conf = "One Bit Audio";
 		break;
 	case CT_DOLBY_D:
-		conf = "Dobly Digital+";
+		conf = "Dolby Digital+";
 		break;
 	case CT_DTS_HD:
 		conf = "DTS_HD";
@@ -2153,6 +2195,8 @@ const char *disp_mode_t[] = {
 	"1080p50hz",
 	"1080p25hz",
 	"1080p24hz",
+	"2560x1080p50hz",
+	"2560x1080p60hz",
 	"2160p30hz",
 	"2160p25hz",
 	"2160p24hz",
@@ -2163,6 +2207,34 @@ const char *disp_mode_t[] = {
 	"smpte60hz",
 	"2160p50hz",
 	"2160p60hz",
+	/* VESA modes */
+	"640x480p60hz",
+	"800x480p60hz",
+	"800x600p60hz",
+	"852x480p60hz",
+	"854x480p60hz",
+	"1024x600p60hz",
+	"1024x768p60hz",
+	"1152x864p75hz",
+	"1280x600p60hz",
+	"1280x768p60hz",
+	"1280x800p60hz",
+	"1280x960p60hz",
+	"1280x1024p60hz",
+	"1360x768p60hz",
+	"1366x768p60hz",
+	"1400x1050p60hz",
+	"1440x900p60hz",
+	"1440x2560p60hz",
+	"1600x900p60hz",
+	"1600x1200p60hz",
+	"1680x1050p60hz",
+	"1920x1200p60hz",
+	"2160x1200p90hz",
+	"2560x1080p60hz",
+	"2560x1440p60hz",
+	"2560x1600p60hz",
+	"3440x1440p60hz",
 	NULL
 };
 
@@ -2266,6 +2338,29 @@ static ssize_t show_preferred_mode(struct device *dev,
 	return pos;
 }
 
+/* cea_cap, a clone of disp_cap */
+static ssize_t show_cea_cap(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return show_disp_cap(dev, attr, buf);
+}
+
+static ssize_t show_vesa_cap(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	int i;
+	struct hdmi_format_para *para = NULL;
+	enum hdmi_vic *vesa_t = &hdmitx_device.RXCap.vesa_timing[0];
+	int pos = 0;
+
+	for (i = 0; vesa_t[i] && i < VESA_MAX_TIMING; i++) {
+		para = hdmi_get_fmt_paras(vesa_t[i]);
+		if (para && (para->vic >= HDMITX_VESA_OFFSET))
+			pos += snprintf(buf+pos, PAGE_SIZE, "%s\n", para->name);
+	}
+	return pos;
+}
+
 /**/
 static int local_support_3dfp(enum hdmi_vic vic)
 {
@@ -2325,45 +2420,80 @@ static ssize_t show_disp_cap_3d(struct device *dev,
 	return pos;
 }
 
+static void _show_pcm_ch(struct rx_cap *pRXCap, int i,
+	int *ppos, char *buf)
+{
+	const char * const aud_sample_size[] = {"ReferToStreamHeader",
+		"16", "20", "24", NULL};
+	int j = 0;
+
+	for (j = 0; j < 3; j++) {
+		if (pRXCap->RxAudioCap[i].cc3 & (1 << j))
+			*ppos += snprintf(buf + *ppos, PAGE_SIZE, "%s/",
+				aud_sample_size[j+1]);
+	}
+	*ppos += snprintf(buf + *ppos - 1, PAGE_SIZE, " bit\n");
+}
+
 /**/
 static ssize_t show_aud_cap(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	int i, pos = 0, j;
-	static const char * const aud_coding_type[] =  {
+	static const char * const aud_ct[] =  {
 		"ReferToStreamHeader", "PCM", "AC-3", "MPEG1", "MP3",
 		"MPEG2", "AAC", "DTS", "ATRAC",	"OneBitAudio",
-		"Dobly_Digital+", "DTS-HD", "MAT", "DST", "WMA_Pro",
+		"Dolby_Digital+", "DTS-HD", "MAT", "DST", "WMA_Pro",
 		"Reserved", NULL};
 	static const char * const aud_sampling_frequency[] = {
 		"ReferToStreamHeader", "32", "44.1", "48", "88.2", "96",
 		"176.4", "192", NULL};
-	static const char * const aud_sample_size[] = {"ReferToStreamHeader",
-		"16", "20", "24", NULL};
-
 	struct rx_cap *pRXCap = &(hdmitx_device.RXCap);
 
 	pos += snprintf(buf + pos, PAGE_SIZE,
 		"CodingType MaxChannels SamplingFreq SampleSize\n");
 	for (i = 0; i < pRXCap->AUD_count; i++) {
-		pos += snprintf(buf + pos, PAGE_SIZE, "%s, %d ch, ",
-			aud_coding_type[pRXCap->RxAudioCap[i].
-				audio_format_code],
+		pos += snprintf(buf + pos, PAGE_SIZE, "%s",
+			aud_ct[pRXCap->RxAudioCap[i].audio_format_code]);
+		if ((pRXCap->RxAudioCap[i].audio_format_code == CT_DOLBY_D) &&
+			(pRXCap->RxAudioCap[i].cc3 & 1))
+			pos += snprintf(buf + pos, PAGE_SIZE, "/ATMOS");
+		pos += snprintf(buf + pos, PAGE_SIZE, ", %d ch, ",
 			pRXCap->RxAudioCap[i].channel_num_max + 1);
 		for (j = 0; j < 7; j++) {
 			if (pRXCap->RxAudioCap[i].freq_cc & (1 << j))
 				pos += snprintf(buf + pos, PAGE_SIZE, "%s/",
 					aud_sampling_frequency[j+1]);
 		}
-		pos += snprintf(buf + pos - 1, PAGE_SIZE, " kHz, ") - 1;
-		for (j = 0; j < 3; j++) {
-			if (pRXCap->RxAudioCap[i].cc3 & (1 << j))
-				pos += snprintf(buf + pos, PAGE_SIZE, "%s/",
-					aud_sample_size[j+1]);
+		pos += snprintf(buf + pos - 1, PAGE_SIZE, " kHz, ");
+		switch (pRXCap->RxAudioCap[i].audio_format_code) {
+		case CT_PCM:
+			_show_pcm_ch(pRXCap, i, &pos, buf);
+			break;
+		case CT_AC_3:
+		case CT_MPEG1:
+		case CT_MP3:
+		case CT_MPEG2:
+		case CT_AAC:
+		case CT_DTS:
+		case CT_ATRAC:
+		case CT_ONE_BIT_AUDIO:
+			pos += snprintf(buf + pos, PAGE_SIZE,
+				"MaxBitRate %dkHz\n",
+				pRXCap->RxAudioCap[i].cc3 * 8);
+			break;
+		case CT_DOLBY_D:
+		case CT_DTS_HD:
+		case CT_MAT:
+		case CT_DST:
+			pos += snprintf(buf + pos, PAGE_SIZE, "DepVaule 0x%x\n",
+				pRXCap->RxAudioCap[i].cc3);
+			break;
+		case CT_WMA:
+		default:
+			break;
 		}
-		pos += snprintf(buf + pos - 1, PAGE_SIZE, " bit\n") - 1;
 	}
-
 	return pos;
 }
 
@@ -2374,6 +2504,7 @@ static ssize_t show_dc_cap(struct device *dev,
 	enum hdmi_vic vic = HDMI_Unknown;
 	int pos = 0;
 	struct rx_cap *pRXCap = &(hdmitx_device.RXCap);
+	const struct dv_info *dv = &(hdmitx_device.RXCap.dv_info);
 
 #if 0
 	if (pRXCap->dc_48bit_420)
@@ -2408,9 +2539,9 @@ static ssize_t show_dc_cap(struct device *dev,
 	}
 next444:
 	if (pRXCap->dc_y444) {
-		if (pRXCap->dc_36bit)
+		if ((pRXCap->dc_36bit) || (dv->sup_10b_12b_444 == 0x2))
 			pos += snprintf(buf + pos, PAGE_SIZE, "444,12bit\n");
-		if (pRXCap->dc_30bit) {
+		if ((pRXCap->dc_30bit) || (dv->sup_10b_12b_444 == 0x1)) {
 			pos += snprintf(buf + pos, PAGE_SIZE, "444,10bit\n");
 			pos += snprintf(buf + pos, PAGE_SIZE, "444,8bit\n");
 		}
@@ -2418,7 +2549,7 @@ next444:
 		if (pRXCap->dc_48bit)
 			pos += snprintf(buf + pos, PAGE_SIZE, "444,16bit\n");
 #endif
-		if (pRXCap->dc_36bit)
+		if ((pRXCap->dc_36bit) || (dv->sup_yuv422_12bit))
 			pos += snprintf(buf + pos, PAGE_SIZE, "422,12bit\n");
 		if (pRXCap->dc_30bit) {
 			pos += snprintf(buf + pos, PAGE_SIZE, "422,10bit\n");
@@ -2436,9 +2567,9 @@ nextrgb:
 	if (pRXCap->dc_48bit)
 		pos += snprintf(buf + pos, PAGE_SIZE, "rgb,16bit\n");
 #endif
-	if (pRXCap->dc_36bit)
+	if ((pRXCap->dc_36bit) || (dv->sup_10b_12b_444 == 0x2))
 		pos += snprintf(buf + pos, PAGE_SIZE, "rgb,12bit\n");
-	if (pRXCap->dc_30bit)
+	if ((pRXCap->dc_30bit) || (dv->sup_10b_12b_444 == 0x1))
 		pos += snprintf(buf + pos, PAGE_SIZE, "rgb,10bit\n");
 	pos += snprintf(buf + pos, PAGE_SIZE, "rgb,8bit\n");
 	return pos;
@@ -2476,7 +2607,7 @@ static ssize_t show_valid_mode(struct device *dev,
 				valid_mode);
 			return pos;
 		}
-		para = hdmi_get_fmt_name(cvalid_mode, cvalid_mode);
+		para = hdmi_tst_fmt_name(cvalid_mode, cvalid_mode);
 	}
 	if (para) {
 		pr_info(SYS "sname = %s\n", para->sname);
@@ -2695,8 +2826,8 @@ static ssize_t show_dv_cap(struct device *dev,
 	if (dv->ver == 2) {
 		pos += snprintf(buf + pos, PAGE_SIZE,
 			"VSVDB Version: V%d\n", dv->ver);
-		pos += snprintf(buf + pos, PAGE_SIZE,
-			"2160p60hz: 1\n");
+		pos += snprintf(buf + pos, PAGE_SIZE, "2160p%shz: 1\n",
+			dv->sup_2160p60hz ? "60" : "30");
 		pos += snprintf(buf + pos, PAGE_SIZE,
 			"Support mode:\n");
 		if ((dv->Interface != 0x00) && (dv->Interface != 0x01)) {
@@ -2903,6 +3034,84 @@ static ssize_t show_rxsense_policy(struct device *dev,
 
 	pos += snprintf(buf + pos, PAGE_SIZE, "%d\n",
 		hdmitx_device.rxsense_policy);
+
+	return pos;
+}
+
+/* cedst_policy: 0, no CED feature
+ *	       1, auto mode, depends on RX scdc_present
+ *	       2, forced CED feature
+ */
+static ssize_t store_cedst_policy(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	int val = 0;
+	struct hdmitx_dev *hdev = &hdmitx_device;
+
+	if (isdigit(buf[0])) {
+		val = buf[0] - '0';
+		pr_info("hdmitx: set cedst_policy as %d\n", val);
+		if ((val == 0) || (val == 1) || (val == 2)) {
+			hdev->cedst_policy = val;
+			if (val == 1) { /* Auto mode, depends on Rx */
+				/* check RX scdc_present */
+				if (hdev->RXCap.scdc_present)
+					hdev->cedst_policy = 1;
+				else
+					hdev->cedst_policy = 0;
+			}
+			if (val == 2) /* Force mode */
+				hdev->cedst_policy = 1;
+			/* assgin cedst_en from dts or here */
+			hdev->cedst_en = hdev->cedst_policy;
+		} else
+			pr_info("only accept as 0, 1(auto), or 2(force)\n");
+	}
+	if (hdev->cedst_policy)
+		queue_delayed_work(hdev->cedst_wq, &hdev->work_cedst, 0);
+	else
+		cancel_delayed_work(&hdev->work_cedst);
+
+
+	return count;
+}
+
+static ssize_t show_cedst_policy(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	int pos = 0;
+
+	pos += snprintf(buf + pos, PAGE_SIZE, "%d\n",
+		hdmitx_device.cedst_policy);
+
+	return pos;
+}
+
+static ssize_t show_cedst_count(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	int pos = 0;
+	struct ced_cnt *ced = &hdmitx_device.ced_cnt;
+	struct scdc_locked_st *ch_st = &hdmitx_device.chlocked_st;
+
+	if (!ch_st->clock_detected)
+		pos += snprintf(buf + pos, PAGE_SIZE, "clock undetected\n");
+	if (!ch_st->ch0_locked)
+		pos += snprintf(buf + pos, PAGE_SIZE, "CH0 unlocked\n");
+	if (!ch_st->ch1_locked)
+		pos += snprintf(buf + pos, PAGE_SIZE, "CH1 unlocked\n");
+	if (!ch_st->ch2_locked)
+		pos += snprintf(buf + pos, PAGE_SIZE, "CH2 unlocked\n");
+	if (ced->ch0_valid && ced->ch0_cnt)
+		pos += snprintf(buf + pos, PAGE_SIZE, "CH0 ErrCnt 0x%x\n",
+			ced->ch0_cnt);
+	if (ced->ch1_valid && ced->ch1_cnt)
+		pos += snprintf(buf + pos, PAGE_SIZE, "CH1 ErrCnt 0x%x\n",
+			ced->ch1_cnt);
+	if (ced->ch2_valid && ced->ch2_cnt)
+		pos += snprintf(buf + pos, PAGE_SIZE, "CH2 ErrCnt 0x%x\n",
+			ced->ch2_cnt);
+	memset(ced, 0, sizeof(*ced));
 
 	return pos;
 }
@@ -3452,6 +3661,8 @@ static DEVICE_ATTR(config, 0664, show_config, store_config);
 static DEVICE_ATTR(debug, 0200, NULL, store_debug);
 static DEVICE_ATTR(disp_cap, 0444, show_disp_cap, NULL);
 static DEVICE_ATTR(preferred_mode, 0444, show_preferred_mode, NULL);
+static DEVICE_ATTR(cea_cap, 0444, show_cea_cap, NULL);
+static DEVICE_ATTR(vesa_cap, 0444, show_vesa_cap, NULL);
 static DEVICE_ATTR(aud_cap, 0444, show_aud_cap, NULL);
 static DEVICE_ATTR(hdr_cap, 0444, show_hdr_cap, NULL);
 static DEVICE_ATTR(dv_cap, 0444, show_dv_cap, NULL);
@@ -3467,6 +3678,8 @@ static DEVICE_ATTR(sspll, 0664, show_sspll, store_sspll);
 static DEVICE_ATTR(frac_rate_policy, 0664, show_frac_rate, store_frac_rate);
 static DEVICE_ATTR(rxsense_policy, 0644, show_rxsense_policy,
 	store_rxsense_policy);
+static DEVICE_ATTR(cedst_policy, 0664, show_cedst_policy, store_cedst_policy);
+static DEVICE_ATTR(cedst_count, 0444, show_cedst_count, NULL);
 static DEVICE_ATTR(hdcp_clkdis, 0664, show_hdcp_clkdis, store_hdcp_clkdis);
 static DEVICE_ATTR(hdcp_pwr, 0664, show_hdcp_pwr, store_hdcp_pwr);
 static DEVICE_ATTR(hdcp_byp, 0200, NULL, store_hdcp_byp);
@@ -3553,6 +3766,11 @@ static int hdmitx_module_disable(enum vmode_e cur_vmod)
 		hdmitx_disable_vclk2_enci(hdev);
 	hdev->para = hdmi_get_fmt_name("invalid", hdev->fmt_attr);
 	hdmitx_validate_vmode("null");
+	if (hdev->cedst_policy)
+		cancel_delayed_work(&hdev->work_cedst);
+	if (hdev->rxsense_policy)
+		queue_delayed_work(hdmitx_device.rxsense_wq,
+			&hdmitx_device.work_rxsense, 0);
 
 	return 0;
 }
@@ -3802,9 +4020,23 @@ static void hdmitx_rxsense_process(struct work_struct *work)
 	queue_delayed_work(hdev->rxsense_wq, &hdev->work_rxsense, HZ);
 }
 
+static void hdmitx_cedst_process(struct work_struct *work)
+{
+	int ced;
+	struct hdmitx_dev *hdev = container_of((struct delayed_work *)work,
+		struct hdmitx_dev, work_cedst);
+
+	ced = hdev->HWOp.CntlMisc(hdev, MISC_TMDS_CEDST, 0);
+	/* firstly send as 0, then real ced, A trigger signal */
+	extcon_set_state_sync(hdmitx_extcon_cedst, EXTCON_DISP_HDMI, 0);
+	extcon_set_state_sync(hdmitx_extcon_cedst, EXTCON_DISP_HDMI, ced);
+	queue_delayed_work(hdev->cedst_wq, &hdev->work_cedst, HZ);
+}
+
 static void hdmitx_hpd_plugin_handler(struct work_struct *work)
 {
 	char bksv_buf[5];
+	struct vinfo_s *info = NULL;
 	struct hdmitx_dev *hdev = container_of((struct delayed_work *)work,
 		struct hdmitx_dev, work_hpd_plugin);
 
@@ -3813,17 +4045,17 @@ static void hdmitx_hpd_plugin_handler(struct work_struct *work)
 	if (hdev->rxsense_policy) {
 		cancel_delayed_work(&hdev->work_rxsense);
 		queue_delayed_work(hdev->rxsense_wq, &hdev->work_rxsense, 0);
-		while (!(hdmitx_extcon_rxsense->state))
-			msleep_interruptible(1000);
 	}
 	mutex_lock(&setclk_mutex);
 	pr_info(SYS "plugin\n");
-	hdev->HWOp.CntlMisc(hdev, MISC_I2C_REACTIVE, 0);
+	if (hdev->chip_type >= MESON_CPU_ID_G12A)
+		hdev->HWOp.CntlMisc(hdev, MISC_I2C_RESET, 0);
 	hdev->hdmitx_event &= ~HDMI_TX_HPD_PLUGIN;
 	/* start reading E-EDID */
 	if (hdev->repeater_tx)
 		rx_repeat_hpd_state(1);
 	hdmitx_get_edid(hdev);
+	hdev->cedst_policy = hdev->cedst_en & hdev->RXCap.scdc_present;
 	hdmi_physcial_size_update(hdev);
 	if (hdev->RXCap.ieeeoui != HDMI_IEEEOUI)
 		hdev->HWOp.CntlConfig(hdev,
@@ -3832,6 +4064,8 @@ static void hdmitx_hpd_plugin_handler(struct work_struct *work)
 		hdev->HWOp.CntlConfig(hdev,
 			CONF_HDMI_DVI_MODE, HDMI_MODE);
 	mutex_lock(&getedid_mutex);
+	if (hdev->chip_type < MESON_CPU_ID_G12A)
+		hdev->HWOp.CntlMisc(hdev, MISC_I2C_REACTIVE, 0);
 	mutex_unlock(&getedid_mutex);
 	if (hdev->repeater_tx) {
 		if (check_fbc_special(&hdev->EDID_buf[0])
@@ -3845,13 +4079,19 @@ static void hdmitx_hpd_plugin_handler(struct work_struct *work)
 	}
 
 	set_disp_mode_auto();
-	hdmitx_set_audio(hdev, &(hdev->cur_audio_param));
+	info = hdmitx_get_current_vinfo();
+	if (info && (info->mode == VMODE_HDMI))
+		hdmitx_set_audio(hdev, &(hdev->cur_audio_param));
 	hdev->hpd_state = 1;
 	hdmitx_notify_hpd(hdev->hpd_state);
 
 	extcon_set_state_sync(hdmitx_extcon_hdmi, EXTCON_DISP_HDMI, 1);
 	extcon_set_state_sync(hdmitx_extcon_audio, EXTCON_DISP_HDMI, 1);
 	mutex_unlock(&setclk_mutex);
+	/* Should be started at end of output */
+	cancel_delayed_work(&hdev->work_cedst);
+	if (hdev->cedst_policy)
+		queue_delayed_work(hdev->cedst_wq, &hdev->work_cedst, 0);
 }
 
 static void clear_rx_vinfo(struct hdmitx_dev *hdev)
@@ -3876,6 +4116,8 @@ static void hdmitx_hpd_plugout_handler(struct work_struct *work)
 	hdev->HWOp.CntlDDC(hdev, DDC_HDCP_MUX_INIT, 1);
 	hdev->HWOp.CntlDDC(hdev, DDC_HDCP_OP, HDCP14_OFF);
 	mutex_lock(&setclk_mutex);
+	if (hdev->cedst_policy)
+		cancel_delayed_work(&hdev->work_cedst);
 	pr_info(SYS "plugout\n");
 	if (!!(hdev->HWOp.CntlMisc(hdev, MISC_HPD_GPI_ST, 0))) {
 		pr_info(SYS "hpd gpio high\n");
@@ -3910,7 +4152,7 @@ static void hdmitx_hpd_plugout_handler(struct work_struct *work)
 
 static void hdmitx_internal_intr_handler(struct work_struct *work)
 {
-	struct hdmitx_dev *hdev = container_of((struct work_struct *)work,
+	struct hdmitx_dev *hdev = container_of((struct delayed_work *)work,
 		struct hdmitx_dev, work_internal_intr);
 
 	hdev->HWOp.DebugFun(hdev, "dumpintr");
@@ -3944,6 +4186,7 @@ int tv_audio_support(int type, struct rx_cap *pRXCap)
 
 static int hdmi_task_handle(void *data)
 {
+	struct vinfo_s *info = NULL;
 	struct hdmitx_dev *hdmitx_device = (struct hdmitx_dev *)data;
 
 	hdmitx_extcon_hdmi->state = !!(hdmitx_device->HWOp.CntlMisc(
@@ -3963,13 +4206,17 @@ static int hdmi_task_handle(void *data)
 		hdmitx_hpd_plugin_handler);
 	INIT_DELAYED_WORK(&hdmitx_device->work_hpd_plugout,
 		hdmitx_hpd_plugout_handler);
-	INIT_WORK(&hdmitx_device->work_internal_intr,
+	INIT_DELAYED_WORK(&hdmitx_device->work_internal_intr,
 		hdmitx_internal_intr_handler);
 
 	/* for rx sense feature */
 	hdmitx_device->rxsense_wq = alloc_workqueue(hdmitx_extcon_rxsense->name,
 		WQ_SYSFS | WQ_FREEZABLE, 0);
 	INIT_DELAYED_WORK(&hdmitx_device->work_rxsense, hdmitx_rxsense_process);
+	/* for cedst feature */
+	hdmitx_device->cedst_wq = alloc_workqueue(hdmitx_extcon_cedst->name,
+		WQ_SYSFS | WQ_FREEZABLE, 0);
+	INIT_DELAYED_WORK(&hdmitx_device->work_cedst, hdmitx_cedst_process);
 
 	hdmitx_device->tx_aud_cfg = 1; /* default audio configure is on */
 
@@ -3978,11 +4225,19 @@ static int hdmi_task_handle(void *data)
 		hdmitx_device->HWOp.SetupIRQ(hdmitx_device);
 
 	/* Trigger HDMITX IRQ*/
-	hdmitx_device->HWOp.CntlMisc(hdmitx_device, MISC_HPD_MUX_OP, PIN_UNMUX);
-	mdelay(20);
 	hdmitx_device->HWOp.CntlMisc(hdmitx_device, MISC_HPD_MUX_OP, PIN_MUX);
+	if (hdmitx_device->HWOp.CntlMisc(hdmitx_device, MISC_HPD_GPI_ST, 0))
+		hdmitx_device->HWOp.CntlMisc(hdmitx_device,
+			MISC_TRIGGER_HPD, 0);
 
 	hdmitx_device->hdmi_init = 1;
+	info = hdmitx_get_current_vinfo();
+	if (!info || !info->name)
+		return 0;
+	if (info->mode == VMODE_HDMI)
+		hdmitx_device->para = hdmi_get_fmt_name(info->name,
+			hdmitx_device->fmt_attr);
+
 	return 0;
 }
 
@@ -4148,6 +4403,7 @@ void hdmitx_extcon_register(struct platform_device *pdev, struct device *dev)
 	ret = extcon_dev_register(edev);
 	if (ret < 0) {
 		pr_info(SYS "failed to register hdmitx extcon hdmi\n");
+		extcon_dev_free(edev);
 		return;
 	}
 	hdmitx_extcon_hdmi = edev;
@@ -4158,13 +4414,13 @@ void hdmitx_extcon_register(struct platform_device *pdev, struct device *dev)
 		pr_info(SYS "failed to allocate hdmitx extcon audio\n");
 		return;
 	}
-
 	edev->dev.parent = dev;
 	edev->name = "hdmitx_extcon_audio";
 	dev_set_name(&edev->dev, "hdmi_audio");
 	ret = extcon_dev_register(edev);
 	if (ret < 0) {
 		pr_info(SYS "failed to register hdmitx extcon audio\n");
+		extcon_dev_free(edev);
 		return;
 	}
 	hdmitx_extcon_audio = edev;
@@ -4175,13 +4431,13 @@ void hdmitx_extcon_register(struct platform_device *pdev, struct device *dev)
 		pr_info(SYS "failed to allocate hdmitx extcon power\n");
 		return;
 	}
-
 	edev->dev.parent = dev;
 	edev->name = "hdmitx_extcon_power";
 	dev_set_name(&edev->dev, "hdmi_power");
 	ret = extcon_dev_register(edev);
 	if (ret < 0) {
 		pr_info(SYS "failed to register extcon power\n");
+		extcon_dev_free(edev);
 		return;
 	}
 	hdmitx_extcon_power = edev;
@@ -4192,16 +4448,33 @@ void hdmitx_extcon_register(struct platform_device *pdev, struct device *dev)
 		pr_info(SYS "failed to allocate hdmitx extcon hdr\n");
 		return;
 	}
-
 	edev->dev.parent = dev;
 	edev->name = "hdmitx_extcon_hdr";
 	dev_set_name(&edev->dev, "hdmi_hdr");
 	ret = extcon_dev_register(edev);
 	if (ret < 0) {
 		pr_info(SYS "failed to register hdmitx extcon hdr\n");
+		extcon_dev_free(edev);
 		return;
 	}
 	hdmitx_extcon_hdr = edev;
+
+	/*hdmitx extcon CED */
+	edev = extcon_dev_allocate(hdmi_cable);
+	if (IS_ERR(edev)) {
+		pr_info(SYS "failed to allocate extcon rxsense\n");
+		return;
+	}
+	edev->dev.parent = dev;
+	edev->name = "hdmitx_extcon_cedst";
+	dev_set_name(&edev->dev, "hdmi_cedst");
+	ret = extcon_dev_register(edev);
+	if (ret < 0) {
+		pr_info(SYS "failed to register extcon cedst\n");
+		extcon_dev_free(edev);
+		return;
+	}
+	hdmitx_extcon_cedst = edev;
 
 	/*hdmitx extcon rxsense*/
 	edev = extcon_dev_allocate(hdmi_cable);
@@ -4209,13 +4482,13 @@ void hdmitx_extcon_register(struct platform_device *pdev, struct device *dev)
 		pr_info(SYS "failed to allocate extcon rxsense\n");
 		return;
 	}
-
 	edev->dev.parent = dev;
 	edev->name = "hdmitx_extcon_rxsense";
 	dev_set_name(&edev->dev, "hdmi_rxsense");
 	ret = extcon_dev_register(edev);
 	if (ret < 0) {
 		pr_info(SYS "failed to register extcon rxsense\n");
+		extcon_dev_free(edev);
 		return;
 	}
 	hdmitx_extcon_rxsense = edev;
@@ -4226,17 +4499,16 @@ void hdmitx_extcon_register(struct platform_device *pdev, struct device *dev)
 		pr_info(SYS "failed to allocate extcon hdcp\n");
 		return;
 	}
-
 	edev->dev.parent = dev;
 	edev->name = "hdmitx_extcon_hdcp";
 	dev_set_name(&edev->dev, "hdcp");
 	ret = extcon_dev_register(edev);
 	if (ret < 0) {
 		pr_info(SYS "failed to register extcon hdcp\n");
+		extcon_dev_free(edev);
 		return;
 	}
 	hdmitx_extcon_hdcp = edev;
-
 }
 
 static void hdmitx_init_parameters(struct hdmitx_info *info)
@@ -4337,6 +4609,7 @@ static int amhdmitx_get_dt_info(struct platform_device *pdev)
 
 #ifdef CONFIG_OF
 	if (pdev->dev.of_node) {
+		int dongle_mode = 0;
 		memset(&hdmitx_device.config_data, 0,
 			sizeof(struct hdmi_config_platform_data));
 		/* Get ic type information */
@@ -4348,6 +4621,14 @@ static int amhdmitx_get_dt_info(struct platform_device *pdev)
 			pr_info(SYS "hdmitx_device.chip_type : %d\n",
 				hdmitx_device.chip_type);
 
+		/* Get dongle_mode information */
+		ret = of_property_read_u32(pdev->dev.of_node, "dongle_mode",
+			&dongle_mode);
+		hdmitx_device.dongle_mode = !!dongle_mode;
+		if (!ret)
+			pr_info(SYS "hdmitx_device.dongle_mode: %d\n",
+				hdmitx_device.dongle_mode);
+
 		ret = of_property_read_u32(pdev->dev.of_node,
 			"repeater_tx", &val);
 		if (!ret)
@@ -4355,6 +4636,11 @@ static int amhdmitx_get_dt_info(struct platform_device *pdev)
 		if (hdmitx_device.repeater_tx == 1)
 			hdmitx_device.topo_info = kzalloc(
 				sizeof(*hdmitx_device.topo_info), GFP_KERNEL);
+
+		ret = of_property_read_u32(pdev->dev.of_node,
+					   "cedst_en", &val);
+		if (!ret)
+			hdmitx_device.cedst_en = !!val;
 
 		/* Get vendor information */
 		ret = of_property_read_u32(pdev->dev.of_node,
@@ -4541,6 +4827,8 @@ static int amhdmitx_probe(struct platform_device *pdev)
 	ret = device_create_file(dev, &dev_attr_debug);
 	ret = device_create_file(dev, &dev_attr_disp_cap);
 	ret = device_create_file(dev, &dev_attr_preferred_mode);
+	ret = device_create_file(dev, &dev_attr_cea_cap);
+	ret = device_create_file(dev, &dev_attr_vesa_cap);
 	ret = device_create_file(dev, &dev_attr_disp_cap_3d);
 	ret = device_create_file(dev, &dev_attr_aud_cap);
 	ret = device_create_file(dev, &dev_attr_hdr_cap);
@@ -4553,6 +4841,8 @@ static int amhdmitx_probe(struct platform_device *pdev)
 	ret = device_create_file(dev, &dev_attr_frac_rate_policy);
 	ret = device_create_file(dev, &dev_attr_sspll);
 	ret = device_create_file(dev, &dev_attr_rxsense_policy);
+	ret = device_create_file(dev, &dev_attr_cedst_policy);
+	ret = device_create_file(dev, &dev_attr_cedst_count);
 	ret = device_create_file(dev, &dev_attr_hdcp_clkdis);
 	ret = device_create_file(dev, &dev_attr_hdcp_pwr);
 	ret = device_create_file(dev, &dev_attr_hdcp_ksv_info);
@@ -4643,6 +4933,8 @@ static int amhdmitx_remove(struct platform_device *pdev)
 	device_remove_file(dev, &dev_attr_debug);
 	device_remove_file(dev, &dev_attr_disp_cap);
 	device_remove_file(dev, &dev_attr_preferred_mode);
+	device_remove_file(dev, &dev_attr_cea_cap);
+	device_remove_file(dev, &dev_attr_vesa_cap);
 	device_remove_file(dev, &dev_attr_disp_cap_3d);
 	device_remove_file(dev, &dev_attr_hdr_cap);
 	device_remove_file(dev, &dev_attr_dv_cap);
@@ -4660,6 +4952,8 @@ static int amhdmitx_remove(struct platform_device *pdev)
 	device_remove_file(dev, &dev_attr_frac_rate_policy);
 	device_remove_file(dev, &dev_attr_sspll);
 	device_remove_file(dev, &dev_attr_rxsense_policy);
+	device_remove_file(dev, &dev_attr_cedst_policy);
+	device_remove_file(dev, &dev_attr_cedst_count);
 	device_remove_file(dev, &dev_attr_hdcp_pwr);
 	device_remove_file(dev, &dev_attr_div40);
 	device_remove_file(dev, &dev_attr_hdcp_repeater);
