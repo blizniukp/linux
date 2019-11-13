@@ -145,8 +145,8 @@ static void max17048_get_soc(struct i2c_client* client)
 	soc = max17048_read_word(client, MAX17048_SOC);
 	if (soc < 0)
 		dev_err(&client->dev, "%s: err %d\n", __func__, soc);
-	else 
-		chip->soc = (soc >> 8);
+	else
+		chip->soc = (soc >> 8) & 0x00FF;
 	if (chip->soc > MAX17048_BATTERY_FULL) {
 		chip->soc = MAX17048_BATTERY_FULL;
 		chip->status = POWER_SUPPLY_STATUS_FULL;
