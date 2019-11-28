@@ -211,7 +211,7 @@ static int max17048_probe(struct i2c_client* client,
     struct i2c_adapter* adapter = to_i2c_adapter(client->dev.parent);
     struct power_supply_config psy_cfg = {};
     struct max17048_chip* chip;
-		
+
     if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_BYTE))
         return -EIO;
 
@@ -225,7 +225,7 @@ static int max17048_probe(struct i2c_client* client,
     psy_cfg.drv_data = chip;
 
     max17048_get_version(client);
-	
+
     chip->battery = power_supply_register(&client->dev,
         &max17048_battery_desc, &psy_cfg);
     if (IS_ERR(chip->battery)) {

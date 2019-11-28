@@ -86,6 +86,14 @@ static struct pca963x_chipdef pca963x_chipdefs[] = {
 #define PCA963X_BLINK_PERIOD_MIN	42
 #define PCA963X_BLINK_PERIOD_MAX	10667
 
+static int outdrv = PCA963X_OPEN_DRAIN;
+
+/*
+0 - PCA963X_OPEN_DRAIN
+1 - PCA963X_TOTEM_POLE
+*/
+module_param(outdrv, int, 0660);
+
 static const struct i2c_device_id pca963x_id[] = {
 	{ "pca9632", pca9633 },
 	{ "pca9633", pca9633 },
@@ -396,12 +404,16 @@ static int pca963x_probe(struct i2c_client *client,
 
 	if (pdata) {
 		/* Configure output: open-drain or totem pole (push-pull) */
-		if (pdata->outdrv == PCA963X_OPEN_DRAIN)
-			i2c_smbus_write_byte_data(client, PCA963X_MODE2, 0x01);
-		else
-			i2c_smbus_write_byte_data(client, PCA963X_MODE2, 0x05);
+		outdrv = pdata->outdrv;
 	}
 
+	if (outdrv == PCA963X_OPEN_DRAIN){
+        	i2c_smbus_write_byte_data(client, PCA963X_MODE2, 0x01);
+		dev_err(&client->dev,"PCA9632 is set to PCA963X_OPEN_DRAIN");
+        }else{
+        	i2c_smbus_write_byte_data(client, PCA963X_MODE2, 0x05);
+		dev_err(&client->dev,"PCA9632 is set to PCA963X_TOTEM_POLE");
+	}
 	return 0;
 
 exit:
