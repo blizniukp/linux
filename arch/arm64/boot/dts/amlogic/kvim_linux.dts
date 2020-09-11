@@ -715,7 +715,6 @@
 
 
 	/* AUDIO MESON DEVICES */
-	/*
 	i2s_dai: I2S {
 		#sound-dai-cells = <0>;
 		compatible = "amlogic, aml-i2s-dai";
@@ -748,7 +747,7 @@
 			"aoclk",
 			"aud_in";
 		i2s_pos_sync = <0>;
-		/ *DMIC;* /  / * I2s Mic or Dmic, default for I2S mic * /
+		/*DMIC;*/  /* I2s Mic or Dmic, default for I2S mic */
 	};
 	dmic:snd_dmic {
 		#sound-dai-cells = <0>;
@@ -798,7 +797,7 @@
 			"mpll0",
 			"pcm_mclk",
 			"pcm_sclk";
-		pcm_mode = <1>; / * 0=slave mode, 1=master mode * /
+		pcm_mode = <1>; /* 0=slave mode, 1=master mode */
 		dai-format = "dsp_a";
 		dai-tdm-slot-tx-mask = <1>;
 		dai-tdm-slot-rx-mask = <1>;
@@ -812,20 +811,21 @@
 	pcm_plat: pcm_platform {
 		compatible = "amlogic, aml-pcm";
 	};
+/*	
 	spdif_codec: spdif_codec{
 		#sound-dai-cells = <0>;
 		compatible = "amlogic, aml-spdif-codec";
 		pinctrl-names = "audio_spdif";
 		pinctrl-0 = <&audio_spdif_pins>;
 	};
+*/
 	pcm_codec: pcm_codec{
 		#sound-dai-cells = <0>;
 		compatible = "amlogic, pcm2BT-codec";
-	};*/
+	};
 	/* endof AUDIO MESON DEVICES */
 
 	/* AUDIO board specific */
-	/*
 	dummy_codec:dummy{
 		#sound-dai-cells = <0>;
 		compatible = "amlogic, aml_dummy_codec";
@@ -837,8 +837,7 @@
 		reg = <0x0 0xc8832000 0x0 0x14>;
 		status = "okay";
 	};
-	*/
-	/*
+	
 	aml_sound_meson {
 		compatible = "aml, meson-snd-card";
 		status = "okay";
@@ -852,6 +851,7 @@
 		hp_paraments = <800 300 0 5 1>;
 		pinctrl-names = "audio_i2s";
 		pinctrl-0 = <&audio_i2s_pins>;
+/*
 		cpu_list = <&cpudai0 &cpudai1 &cpudai2>;
 		codec_list = <&codec0 &codec1 &codec2>;
 		plat_list = <&i2s_plat &i2s_plat &pcm_plat>;
@@ -873,7 +873,24 @@
 		codec2: codec2 {
 			sound-dai = <&pcm_codec>;
 		};
-	};*/
+*/
+                cpu_list = <&cpudai0 &cpudai1>;
+                codec_list = <&codec0 &codec1>;
+                plat_list = <&i2s_plat &pcm_plat>;
+                cpudai0: cpudai0 {
+                        sound-dai = <&i2s_dai>;
+                };
+                cpudai1: cpudai1 {
+                        sound-dai = <&pcm_dai>;
+                };
+                codec0: codec0 {
+                        sound-dai = <&amlogic_codec>;
+                };
+                codec1: codec1 {
+                        sound-dai = <&pcm_codec>;
+                };
+
+	};
 	/* END OF AUDIO board specific */
 	rdma{
 		compatible = "amlogic, meson, rdma";
@@ -1178,8 +1195,8 @@
 	gt9xx@14 {
 		compatible = "goodix,gt9xx";
 		reg = <0x14>;
-		reset-gpio = <&gpio GPIOH_7 0x00>;
-		irq-gpio = <&gpio GPIOH_6 0x00>;
+		reset-gpio = <&gpio GPIOH_4 0x00>;
+		irq-gpio = <&gpio GPIOH_5 0x00>;
 	};
 };
 
